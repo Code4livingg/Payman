@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+  policies     Policy?
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  toAddress String
+  amount    Float
+  memo      String?
+  txHash    String
+  status    String
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Policy {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id])
+
+  maxSinglePayment   Float    @default(100)
+  dailyLimit         Float    @default(500)
+  requireMemo        Boolean  @default(false)
+  whitelistEnabled   Boolean  @default(false)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

@@ -4,3 +4,4 @@ npm-debug.log*
 .env.local
 prisma/dev.db
 prisma/dev.db-journal
+.env

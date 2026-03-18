@@ -9,8 +9,8 @@ interface Props {
 
 export function PaymentConfirmCard({ draft, feeEth, sending, onConfirm }: Props) {
   return (
-    <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm text-emerald-50">
-      <p className="text-xs uppercase tracking-wider text-emerald-300">Ready To Confirm</p>
+    <div className="rounded-[20px] border border-[#00c896]/25 bg-[rgba(0,200,150,0.06)] p-4 text-sm text-emerald-50">
+      <p className="text-xs uppercase tracking-[0.14em] text-[#00c896]">Ready To Confirm</p>
       <div className="mt-3 grid gap-1">
         <p>Recipient: <span className="font-mono">{draft.to_address}</span></p>
         <p>Amount: {draft.amount_usdt} USDT</p>
@@ -21,7 +21,7 @@ export function PaymentConfirmCard({ draft, feeEth, sending, onConfirm }: Props)
       <button
         onClick={onConfirm}
         disabled={sending}
-        className="mt-4 w-full rounded-lg bg-emerald-500 px-3 py-2 font-medium text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+        className="mt-4 w-full rounded-full bg-[#00c896] px-3 py-2 font-medium text-black transition hover:brightness-110 disabled:opacity-50"
       >
         {sending ? 'Sending...' : 'Confirm and Send'}
       </button>

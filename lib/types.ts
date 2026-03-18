@@ -60,6 +60,7 @@ export interface Policy {
 export type ActivityType =
   | 'payment_sent'
   | 'payment_failed'
+  | 'payment_blocked'
   | 'invoice_generated'
   | 'invoice_paid'
   | 'invoice_overdue'

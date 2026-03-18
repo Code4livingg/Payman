@@ -14,12 +14,18 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <main className="rounded-2xl border border-slate-800 bg-panel/80 p-5 shadow-xl backdrop-blur">
+    <main className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-xl backdrop-blur-xl">
       <h1 className="text-xl font-semibold text-slate-100">Chat History</h1>
       <p className="mt-1 text-sm text-slate-400">Restore a previous conversation session.</p>
 
       <div className="mt-5 space-y-2">
-        {!sessions.length && <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-400">No saved chat sessions yet.</p>}
+        {!sessions.length && (
+          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+            <div className="mx-auto mb-3 h-10 w-10 rounded-full border border-white/10 bg-white/[0.03]" />
+            <p className="text-sm font-medium text-slate-200">No session history</p>
+            <p className="mt-1 text-xs text-slate-500">Start a chat to create your first session.</p>
+          </div>
+        )}
         {sessions.map((session, index) => (
           <Link
             key={session.id}

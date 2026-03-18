@@ -1,15 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, RefreshCcw, Settings } from 'lucide-react';
 import { ActivityFeed } from './ActivityFeed';
 import { DraftPaymentCard } from './DraftPaymentCard';
+import { ExecutionFlow, type ExecutionFlowStatus, type ExecutionPaymentDetails } from './ExecutionFlow';
 import { InvoicesList } from './InvoicesList';
 import { InsightsCards } from './InsightsCards';
 import { MessageBubble } from './MessageBubble';
 import { PaymentConfirmCard } from './PaymentConfirmCard';
 import { PaymentExplanationCard } from './PaymentExplanationCard';
+import { PaymanLogo } from './PaymanLogo';
+import { RejectionCard, type RejectionReason } from './RejectionCard';
 import { SchedulesList } from './SchedulesList';
 import { TransactionHistoryPanel } from './TransactionHistoryPanel';
 import { generateExplanation } from '@/lib/explainer';
@@ -45,14 +49,6 @@ const PROMPTS = [
   'Create invoice for 500 USDT for logo design',
   'How much have I spent this week?'
 ];
-const EXECUTION_FEED_STEPS = [
-  'Receiving request',
-  'Running policy checks',
-  'Verifying recipient',
-  'Authorizing transaction',
-  'Submitting transaction'
-];
-
 type GuidedFlow = 'menu' | 'send' | 'schedule';
 
 interface WalletState {
@@ -131,6 +127,7 @@ function parseInvoiceDescription(text: string): string {
 }
 
 export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessionId?: string }) {
+  const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -167,7 +164,18 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const [guidedWhen, setGuidedWhen] = useState('');
   const [showSessionChoice, setShowSessionChoice] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
-  const [executionFeedCount, setExecutionFeedCount] = useState(0);
+  const [executionFlowStep, setExecutionFlowStep] = useState(0);
+  const [executionFlowStatus, setExecutionFlowStatus] = useState<ExecutionFlowStatus>('idle');
+  const [executionFlowReason, setExecutionFlowReason] = useState('');
+  const [executionTxHash, setExecutionTxHash] = useState('');
+  const [executionPaymentDetails, setExecutionPaymentDetails] = useState<ExecutionPaymentDetails | undefined>(undefined);
+  const [rejection, setRejection] = useState<{
+    reason: RejectionReason;
+    attempted: number;
+    limit: number | string;
+    ruleText: string;
+    fixText: string;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -260,18 +268,74 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     storage.setLocalTransactions([next, ...current].slice(0, 200));
   };
 
-  const startExecutionFeed = () => {
-    setExecutionFeedCount(1);
-    const timers = EXECUTION_FEED_STEPS.map((_, idx) =>
-      setTimeout(() => {
-        setExecutionFeedCount(idx + 1);
-      }, idx * 180)
-    );
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      setExecutionFeedCount(0);
+  const classifyRejection = (
+    errorText: string,
+    currentDraft: DraftPayment
+  ): { reason: RejectionReason; limit: number | string; ruleText: string; fixText: string } => {
+    const normalized = errorText.toLowerCase();
+
+    if (currentDraft.amount_usdt > policy.max_single_usdt || /max.*single|single.*limit|exceeds.*limit/.test(normalized)) {
+      return {
+        reason: 'amount_exceeded',
+        limit: policy.max_single_usdt,
+        ruleText: `Amount ${currentDraft.amount_usdt} USDT exceeds single limit of ${policy.max_single_usdt} USDT`,
+        fixText: 'Reduce the amount to fit the single-payment limit or raise the limit in Settings.'
+      };
+    }
+
+    if (/daily.*cap|daily.*limit|24h/i.test(normalized)) {
+      return {
+        reason: 'daily_cap_reached',
+        limit: policy.daily_cap_usdt,
+        ruleText: `Daily cap of ${policy.daily_cap_usdt} USDT reached. ${spentToday.toFixed(2)} USDT spent today`,
+        fixText: 'Wait for the daily window to reset or increase the daily cap in Settings.'
+      };
+    }
+
+    if (/whitelist|not approved|not allowed recipient/.test(normalized)) {
+      return {
+        reason: 'whitelist_violation',
+        limit: policy.max_single_usdt,
+        ruleText: 'Recipient not in approved whitelist',
+        fixText: 'Send to an approved address or update the whitelist in Settings.'
+      };
+    }
+
+    if (/memo|required memo|missing memo/.test(normalized)) {
+      return {
+        reason: 'missing_memo',
+        limit: 'Memo required',
+        ruleText: 'This payment requires a justification memo',
+        fixText: 'Add a memo explaining the payment, then try again.'
+      };
+    }
+
+    if (/duplicate|already sent|replay/i.test(normalized)) {
+      return {
+        reason: 'duplicate_payment',
+        limit: policy.block_duplicate_mins,
+        ruleText: `Duplicate payment blocked within ${policy.block_duplicate_mins} minutes`,
+        fixText: 'Wait for the duplicate-protection window to expire or adjust it in Settings.'
+      };
+    }
+
+    return {
+      reason: 'invalid_address',
+      limit: 'Valid 0x address required',
+      ruleText: 'Not a valid Ethereum address',
+      fixText: 'Replace the recipient with a valid Ethereum address before sending.'
     };
+  };
+
+  const resetExecutionFlow = () => {
+    setExecutionFlowStatus('idle');
+    setExecutionFlowReason('');
+    setExecutionFlowStep(0);
+    setExecutionTxHash('');
+    setExecutionPaymentDetails(undefined);
+    setRejection(null);
   };
 
   const showFlowCompleteChoice = () => {
@@ -297,6 +361,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setFeeEth('');
     setPaymentExplanations([]);
     setShowSessionChoice(false);
+    resetExecutionFlow();
     setMessages([agentMessage('Execution request received. Select an action to continue.')]);
   };
 
@@ -384,6 +449,13 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     const weekMs = 7 * 24 * 60 * 60 * 1000;
     return activity
       .filter((item) => item.type === 'payment_sent' && now - new Date(item.timestamp).getTime() <= weekMs)
+      .reduce((sum, item) => sum + Number(item.metadata?.amount_usdt || 0), 0);
+  }, [activity]);
+
+  const spentToday = useMemo(() => {
+    const today = new Date().toDateString();
+    return activity
+      .filter((item) => item.type === 'payment_sent' && new Date(item.timestamp).toDateString() === today)
       .reduce((sum, item) => sum + Number(item.metadata?.amount_usdt || 0), 0);
   }, [activity]);
 
@@ -490,44 +562,77 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   const executeDraftThroughPipeline = async (currentDraft: DraftPayment) => {
     setSending(true);
-    const stopFeed = startExecutionFeed();
+    setRejection(null);
+    setExecutionFlowStatus('running');
+    setExecutionFlowReason('');
+    setExecutionFlowStep(0);
+    setExecutionTxHash('');
+    setExecutionPaymentDetails({
+      amount: currentDraft.amount_usdt,
+      recipient: currentDraft.to_address,
+      memo: currentDraft.memo
+    });
     try {
-      if (walletMode === 'metamask') {
-        const quoteResponse = await fetch('/api/wallet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            wallet: getCurrentWalletId(),
-            mode: 'quote',
-            to_address: currentDraft.to_address,
-            amount_usdt: currentDraft.amount_usdt,
-            memo: currentDraft.memo,
-            policy,
-            activity
-          })
-        });
-        const quoteData = await quoteResponse.json();
-        if (!quoteData.ok) {
-          addLocalTransaction({
-            recipient: 'Manual payment',
-            to_address: currentDraft.to_address,
-            amount_usdt: currentDraft.amount_usdt,
-            status: 'failed',
-            failure_reason: quoteData.error || 'Policy validation failed'
-          });
-          addActivity({
-            type: 'payment_failed',
-            title: 'Payment failed',
-            description: quoteData.error || 'Policy validation failed',
-            metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: 'metamask' }
-          });
-          setMessages((prev) => [...prev, agentMessage(`Execution halted: ${quoteData.error}`, 'system')]);
-          showFlowCompleteChoice();
-          return;
-        }
+      await wait(800);
+      setExecutionFlowStep(1);
+      await wait(800);
+      setExecutionFlowStep(2);
 
+      const quoteResponse = await fetch('/api/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: getCurrentWalletId(),
+          mode: 'quote',
+          to_address: currentDraft.to_address,
+          amount_usdt: currentDraft.amount_usdt,
+          memo: currentDraft.memo,
+          policy,
+          activity
+        })
+      });
+      const quoteData = await quoteResponse.json();
+      if (!quoteData.ok) {
+        const reason = quoteData.error || 'Policy validation failed';
+        const rejectionDetails = classifyRejection(reason, currentDraft);
+        setExecutionFlowStatus('blocked');
+        setExecutionFlowReason(reason);
+        setExecutionFlowStep(2);
+        setRejection({
+          reason: rejectionDetails.reason,
+          attempted: currentDraft.amount_usdt,
+          limit: rejectionDetails.limit,
+          ruleText: rejectionDetails.ruleText,
+          fixText: rejectionDetails.fixText
+        });
+        addLocalTransaction({
+          recipient: 'Manual payment',
+          to_address: currentDraft.to_address,
+          amount_usdt: currentDraft.amount_usdt,
+          status: 'failed',
+          failure_reason: `BLOCKED: ${reason}`
+        });
+        addActivity({
+          type: 'payment_blocked',
+          title: 'Payment blocked',
+          description: `BLOCKED: ${reason}`,
+          metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: walletMode }
+        });
+        setMessages((prev) => [...prev, agentMessage(`Execution halted: BLOCKED: ${reason}`, 'system')]);
+        showFlowCompleteChoice();
+        return;
+      }
+
+      await wait(800);
+      setExecutionFlowStep(3);
+      await wait(800);
+      setExecutionFlowStep(4);
+
+      if (walletMode === 'metamask') {
         try {
           const tx = await sendUsdtWithMetaMask(currentDraft.to_address, currentDraft.amount_usdt);
+          setExecutionFlowStep(5);
+          await wait(800);
           const validationResults = evaluatePaymentValidation(currentDraft, policy, activity);
           const explanation = generateExplanation({
             triggerType: 'manual_command',
@@ -570,6 +675,9 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           ]);
           setPaymentExplanations((prev) => [...prev, { id: generateId('exp'), explanation }]);
           setDraft(null);
+          setExecutionTxHash(tx.txHash);
+          setExecutionFlowStep(6);
+          setExecutionFlowStatus('complete');
           await refreshMetaMaskWallet();
           showFlowCompleteChoice();
           return;
@@ -582,25 +690,59 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
               status: 'failed',
               failure_reason: 'User rejected MetaMask confirmation'
             });
+            setExecutionFlowStatus('blocked');
+            setExecutionFlowReason('User rejected wallet confirmation');
+            setExecutionFlowStep(4);
+            setRejection(null);
             setMessages((prev) => [...prev, agentMessage('Execution cancelled: MetaMask authorization rejected.', 'system')]);
             showFlowCompleteChoice();
             return;
           }
           console.warn('MetaMask failed, falling back', error);
           setWalletMode('demo');
-          await executeApiPayment(currentDraft);
+          const fallbackResult = await executeApiPayment(currentDraft);
+          if (fallbackResult.ok) {
+            setExecutionTxHash(fallbackResult.txHash || '');
+            setExecutionFlowStep(5);
+            await wait(800);
+            setExecutionFlowStep(6);
+            setExecutionFlowStatus('complete');
+            setRejection(null);
+          } else {
+            setExecutionFlowStatus('blocked');
+            setExecutionFlowReason(fallbackResult.error || 'Execution failed');
+            setExecutionFlowStep(5);
+            setRejection(null);
+          }
+          showFlowCompleteChoice();
           return;
         }
       }
 
-      await executeApiPayment(currentDraft);
+      const sendResult = await executeApiPayment(currentDraft);
+      if (sendResult.ok) {
+        setExecutionTxHash(sendResult.txHash || '');
+        setExecutionFlowStep(5);
+        await wait(800);
+        setExecutionFlowStep(6);
+        setExecutionFlowStatus('complete');
+        setRejection(null);
+      } else {
+        setExecutionFlowStatus('blocked');
+        setExecutionFlowReason(sendResult.error || 'Execution failed');
+        setExecutionFlowStep(5);
+        setRejection(null);
+      }
+      showFlowCompleteChoice();
     } catch (error) {
+      setExecutionFlowStatus('blocked');
+      setExecutionFlowReason(error instanceof Error ? error.message : 'Execution error');
+      setRejection(null);
       setMessages((prev) => [
         ...prev,
         agentMessage(`Execution error: ${error instanceof Error ? error.message : 'unknown error'}`, 'system')
       ]);
     } finally {
-      stopFeed();
       setSending(false);
     }
   };
@@ -904,7 +1046,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     }
   };
 
-  const executeApiPayment = async (currentDraft: DraftPayment) => {
+  const executeApiPayment = async (currentDraft: DraftPayment): Promise<{ ok: boolean; error?: string; txHash?: string }> => {
     const response = await fetch('/api/wallet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -935,8 +1077,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt }
       });
       setMessages((prev) => [...prev, agentMessage(`Execution halted: ${data.error}`, 'system')]);
-      showFlowCompleteChoice();
-      return;
+      return { ok: false, error: data.error || 'Unknown send failure' };
     }
 
     addActivity({
@@ -973,7 +1114,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
     setDraft(null);
     await fetchWallet();
-    showFlowCompleteChoice();
+    return { ok: true, txHash: data.tx_hash };
   };
 
   const onConfirmPayment = async () => {
@@ -1111,10 +1252,10 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const showConfirm = Boolean(draft?.to_address && draft?.amount_usdt);
 
   return (
-    <div className="min-h-screen p-4 md:p-6">
+    <div className="min-h-screen">
       <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-[320px_1fr]">
-        <aside className="h-fit rounded-2xl border border-slate-800 bg-panel/90 p-4 shadow-xl backdrop-blur">
-          <h2 className="text-lg font-semibold text-slate-100">Payman</h2>
+        <aside className="h-fit rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-xl backdrop-blur-xl">
+          <PaymanLogo size="sm" />
           <div className="mt-3 flex items-center justify-between">
             <p className="text-xs text-slate-400">{walletMode === 'metamask' ? 'Connected: MetaMask' : 'Demo Wallet'}</p>
             <span
@@ -1134,34 +1275,34 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             <p className="text-xs text-slate-400">USDT Balance</p>
             <button
               onClick={() => setBalanceVisible((prev) => !prev)}
-              className="rounded-md border border-slate-700 p-1 text-slate-300 hover:bg-slate-800"
+              className="rounded-md border border-white/10 p-1 text-slate-300 hover:bg-white/[0.04]"
               aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
             >
               {balanceVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
             </button>
           </div>
-          <p className="text-xl font-semibold text-emerald-300">{balanceVisible ? wallet.usdt_balance : '****'}</p>
+          <p className="text-3xl font-bold text-[#00c896] [text-shadow:0_0_22px_rgba(0,200,150,0.28)]">{balanceVisible ? wallet.usdt_balance : '****'}</p>
           <div className="mt-3 flex gap-2">
             <button
               onClick={walletMode === 'metamask' ? refreshMetaMaskWallet : fetchWallet}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 hover:bg-white/[0.04]"
             >
               <RefreshCcw className="h-3 w-3" /> Refresh
             </button>
             <Link
               href="/settings"
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 hover:bg-white/[0.04]"
             >
               <Settings className="h-3 w-3" /> Settings
             </Link>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1 text-xs">
+          <div className="mt-6 grid grid-cols-3 gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 text-xs">
             {(['activity', 'schedules', 'invoices'] as TabType[]).map((item) => (
               <button
                 key={item}
                 onClick={() => setTab(item)}
-                className={`rounded-md px-2 py-1 capitalize ${tab === item ? 'bg-emerald-500 text-slate-950' : 'text-slate-300'}`}
+                className={`rounded-full px-2 py-1 capitalize transition ${tab === item ? 'bg-[#00c896] text-black' : 'text-slate-300 hover:bg-white/[0.04]'}`}
               >
                 {item}
               </button>
@@ -1191,17 +1332,17 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           </div>
         </aside>
 
-        <main className="flex min-h-[80vh] flex-col rounded-2xl border border-slate-800 bg-panel/80 shadow-xl backdrop-blur">
+        <main className="flex min-h-[80vh] flex-col rounded-2xl border border-white/10 bg-white/[0.02] shadow-xl backdrop-blur-xl">
           <div className="flex-1 space-y-3 overflow-y-auto p-4 md:p-6">
             {!messages.length && (
-              <div className="rounded-xl border border-slate-700 bg-panelSoft/50 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="mb-3 text-sm text-slate-300">Try one of these prompts:</p>
                 <div className="grid gap-2 md:grid-cols-2">
                   {PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => onSendMessage(prompt)}
-                      className="rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-left text-sm text-slate-200 transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left text-sm text-slate-200 transition hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.04)]"
                     >
                       {prompt}
                     </button>
@@ -1211,15 +1352,16 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             )}
 
             {guidedStep === 0 && messages.length <= 2 && (
-              <div className="rounded-xl border border-slate-700 bg-panelSoft/50 p-4 transition-all duration-300 ease-in-out">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-all duration-300 ease-in-out">
                 <p className="mb-3 text-sm text-slate-300">Choose an action:</p>
                 <div className="grid gap-2 md:grid-cols-2">
-                  {['Send Payment', 'Schedule Payment', 'View Invoices', 'Check Spending'].map((option) => (
+                  {['Send Payment', 'Schedule Payment', 'View Invoices', 'Check Spending'].map((option, idx) => (
                     <button
                       key={option}
                       onClick={() => onSendMessage(option)}
-                      className="rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-left text-sm text-slate-200 transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left text-sm text-slate-200 transition hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.04)]"
                     >
+                      <span className={`mr-2 inline-block h-2 w-2 rounded-full ${idx === 0 ? 'bg-[#00c896]' : idx === 1 ? 'bg-[#7c3aed]' : idx === 2 ? 'bg-cyan-300' : 'bg-amber-300'}`} />
                       {option}
                     </button>
                   ))}
@@ -1239,29 +1381,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
               <PaymentConfirmCard draft={draft} feeEth={feeEth} sending={sending} onConfirm={onConfirmPayment} />
             )}
 
-            {sending && executionFeedCount > 0 && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-                <p className="mb-2 text-xs uppercase tracking-[0.14em] text-amber-200">Live Execution Feed</p>
-                <div className="space-y-1.5">
-                  {EXECUTION_FEED_STEPS.map((step, idx) => {
-                    const visible = executionFeedCount > idx;
-                    return (
-                      <p
-                        key={step}
-                        className={`text-xs transition-all duration-200 ${
-                          visible ? 'translate-y-0 text-amber-100 opacity-100' : 'translate-y-1 text-slate-500 opacity-35'
-                        }`}
-                      >
-                        {visible ? `• ${step}` : `· ${step}`}
-                      </p>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {typing && (
-              <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-slate-300">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-slate-300">
                 <span>Validating input...</span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.2s]" />
@@ -1272,18 +1393,18 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             )}
 
             {showSessionChoice && (
-              <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="mb-3 text-sm text-slate-300">Do you want to continue or start a new session?</p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setShowSessionChoice(false)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                    className="rounded-full border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-slate-200 hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.08)]"
                   >
                     Continue Chat
                   </button>
                   <button
                     onClick={startNewSession}
-                    className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+                    className="rounded-full bg-[#00c896] px-3 py-2 text-sm font-medium text-black hover:brightness-110"
                   >
                     Start New Chat
                   </button>
@@ -1292,7 +1413,31 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             )}
           </div>
 
-          <div className="border-t border-slate-800 p-4">
+          <div className="border-t border-white/10 p-4">
+            {executionFlowStatus !== 'idle' && (
+              <div className="mb-4 space-y-3">
+                <ExecutionFlow
+                  currentStep={executionFlowStep}
+                  status={executionFlowStatus}
+                  rejectionReason={executionFlowReason}
+                  txHash={executionTxHash}
+                  paymentDetails={executionPaymentDetails}
+                  onEditPayment={resetExecutionFlow}
+                  onOpenSettings={() => router.push('/settings')}
+                />
+                {rejection ? (
+                  <RejectionCard
+                    reason={rejection.reason}
+                    attempted={rejection.attempted}
+                    limit={rejection.limit}
+                    ruleText={rejection.ruleText}
+                    fixText={rejection.fixText}
+                    onEditAmount={resetExecutionFlow}
+                    onOpenSettings={() => router.push('/settings')}
+                  />
+                ) : null}
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 value={input}
@@ -1301,12 +1446,12 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
                   if (event.key === 'Enter') onSendMessage();
                 }}
                 placeholder="Ask Payman to send, schedule, invoice, or query spending..."
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none ring-emerald-500 placeholder:text-slate-500 focus:ring-2"
+                className="w-full rounded-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[#00c896] focus:shadow-[0_0_0_3px_rgba(0,200,150,0.1)]"
               />
               <button
                 onClick={() => onSendMessage()}
                 disabled={!input.trim() || typing}
-                className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+                className="rounded-full bg-[#00c896] px-5 py-3 text-sm font-medium text-black transition hover:brightness-110 disabled:opacity-50"
               >
                 Send
               </button>

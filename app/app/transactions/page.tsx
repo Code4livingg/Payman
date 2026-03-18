@@ -13,15 +13,17 @@ export default function TransactionsPage() {
   }, []);
 
   return (
-    <main className="rounded-2xl border border-slate-800 bg-panel/80 p-5 shadow-xl backdrop-blur">
+    <main className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-xl backdrop-blur-xl">
       <h1 className="text-xl font-semibold text-slate-100">Transactions</h1>
       <p className="mt-1 text-sm text-slate-400">Tracked payment outcomes across demo and live flows.</p>
 
       <div className="mt-5 space-y-2">
         {!transactions.length && (
-          <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-400">
-            No executions yet. Your first transaction will appear here.
-          </p>
+          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+            <div className="mx-auto mb-3 h-10 w-10 rounded-full border border-white/10 bg-white/[0.03]" />
+            <p className="text-sm font-medium text-slate-200">No executions yet</p>
+            <p className="mt-1 text-xs text-slate-500">Your first transaction will appear here.</p>
+          </div>
         )}
         {transactions.map((tx) => (
           <article key={tx.id} className="rounded-lg border border-slate-700 bg-slate-900/70 p-3 transition duration-200 hover:border-slate-600">

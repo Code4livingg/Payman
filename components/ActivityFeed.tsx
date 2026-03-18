@@ -14,6 +14,7 @@ import { formatDate } from '@/lib/utils';
 const config = {
   payment_sent: { icon: CheckCircle, className: 'text-emerald-300 border-emerald-400/30 bg-emerald-500/10' },
   payment_failed: { icon: XCircle, className: 'text-red-300 border-red-400/30 bg-red-500/10' },
+  payment_blocked: { icon: AlertTriangle, className: 'text-amber-300 border-amber-400/30 bg-amber-500/10' },
   invoice_generated: { icon: BadgeDollarSign, className: 'text-slate-200 border-slate-600 bg-slate-700/20' },
   invoice_paid: { icon: CheckCircle, className: 'text-emerald-300 border-emerald-400/30 bg-emerald-500/10' },
   invoice_overdue: { icon: AlertTriangle, className: 'text-amber-300 border-amber-400/30 bg-amber-500/10' },

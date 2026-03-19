@@ -88,8 +88,8 @@ export default function LandingPage() {
             <span className="hover:text-white">Execution</span>
             <span className="hover:text-white">Policies</span>
             <span className="hover:text-white">Audit</span>
-            <Link href="/app" className="rounded-full bg-[#00c896] px-4 py-1.5 text-xs font-semibold text-black">
-              Launch App
+            <Link href="/app">
+              <button className="rounded-full bg-[#00c896] px-4 py-1.5 text-xs font-semibold text-black">Launch App</button>
             </Link>
           </div>
         </nav>
@@ -143,8 +143,10 @@ export default function LandingPage() {
 
             <div>
               <div className="flex flex-wrap gap-3">
-                <Link href="/app" className="rounded-full bg-[#00c896] px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02] hover:brightness-110">
-                  Execute with Payman
+                <Link href="/app">
+                  <button className="rounded-full bg-[#00c896] px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02] hover:brightness-110">
+                    Execute with Payman
+                  </button>
                 </Link>
                 <Link href="/system" className="rounded-full border border-white/20 bg-transparent px-6 py-3 text-sm text-white transition hover:bg-white/5">
                   View System ↓

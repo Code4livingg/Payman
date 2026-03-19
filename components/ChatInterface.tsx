@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, RefreshCcw, Settings } from 'lucide-react';
 import { ActivityFeed } from './ActivityFeed';
 import { DraftPaymentCard } from './DraftPaymentCard';
@@ -137,6 +137,7 @@ function parseInvoiceDescription(text: string): string {
 
 export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessionId?: string }) {
   const router = useRouter();
+  const execFlowTimersRef = useRef<number[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -276,7 +277,13 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  const clearExecFlowTimers = () => {
+    execFlowTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    execFlowTimersRef.current = [];
+  };
+
   const resetExecutionFlow = () => {
+    clearExecFlowTimers();
     setExecFlow({
       status: 'idle',
       currentStep: 0,
@@ -287,6 +294,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       memo: ''
     });
   };
+
+  useEffect(() => () => clearExecFlowTimers(), []);
 
   const showFlowCompleteChoice = () => {
     setShowSessionChoice(true);
@@ -505,22 +514,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   const executeDraftThroughPipeline = async (currentDraft: DraftPayment) => {
     setSending(true);
-    setExecFlow({
-      status: 'running',
-      currentStep: 0,
-      rejectionReason: '',
-      txHash: '',
-      amount: currentDraft.amount_usdt,
-      recipient: currentDraft.to_address,
-      memo: currentDraft.memo || ''
-    });
 
     try {
-      await wait(700);
-      setExecFlow((prev) => ({ ...prev, currentStep: 1 }));
-      await wait(700);
-      setExecFlow((prev) => ({ ...prev, currentStep: 2 }));
-
       const quoteResponse = await fetch('/api/wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -538,12 +533,15 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
       if (!quoteData.ok) {
         const reason = quoteData.error || 'Policy validation failed';
-        setExecFlow((prev) => ({
-          ...prev,
+        setExecFlow({
           status: 'blocked',
           currentStep: 2,
-          rejectionReason: reason
-        }));
+          rejectionReason: reason,
+          txHash: '',
+          amount: currentDraft.amount_usdt,
+          recipient: currentDraft.to_address,
+          memo: currentDraft.memo || ''
+        });
         addLocalTransaction({
           recipient: 'Manual payment',
           to_address: currentDraft.to_address,
@@ -562,18 +560,34 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         return;
       }
 
-      await wait(700);
-      setExecFlow((prev) => ({ ...prev, currentStep: 3 }));
-      await wait(700);
-      setExecFlow((prev) => ({ ...prev, status: 'awaiting', currentStep: 4 }));
+      clearExecFlowTimers();
+      setExecFlow({
+        status: 'running',
+        currentStep: 0,
+        rejectionReason: '',
+        txHash: '',
+        amount: currentDraft.amount_usdt,
+        recipient: currentDraft.to_address,
+        memo: currentDraft.memo || ''
+      });
+
+      execFlowTimersRef.current = [
+        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 1 })), 700),
+        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 2 })), 1400),
+        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 3 })), 2100),
+        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, status: 'awaiting', currentStep: 4 })), 2800)
+      ];
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Execution error';
-      setExecFlow((prev) => ({
-        ...prev,
+      setExecFlow({
         status: 'blocked',
         currentStep: 2,
-        rejectionReason: reason
-      }));
+        rejectionReason: reason,
+        txHash: '',
+        amount: currentDraft.amount_usdt,
+        recipient: currentDraft.to_address,
+        memo: currentDraft.memo || ''
+      });
       setMessages((prev) => [...prev, agentMessage(`Execution error: ${reason}`, 'system')]);
       showFlowCompleteChoice();
     } finally {
@@ -585,6 +599,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     if (!draft) return;
 
     setSending(true);
+    clearExecFlowTimers();
     setExecFlow((prev) => ({
       ...prev,
       status: 'running',
@@ -632,6 +647,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             txHash: tx.txHash,
             status: 'success'
           });
+          await wait(1500);
+          setExecFlow((prev) => ({ ...prev, currentStep: 6 }));
           setMessages((prev) => [
             ...prev,
             agentMessage(`Transaction submitted via MetaMask. Tx: ${tx.txHash}\nExplorer: ${tx.explorerUrl}`, 'system')
@@ -659,7 +676,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             setExecFlow((prev) => ({
               ...prev,
               status: 'blocked',
-              currentStep: 4,
+              currentStep: 5,
               rejectionReason: 'User rejected wallet confirmation'
             }));
             setMessages((prev) => [...prev, agentMessage('Execution cancelled: MetaMask authorization rejected.', 'system')]);
@@ -674,6 +691,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
       const sendResult = await executeApiPayment(draft);
       if (sendResult.ok) {
+        await wait(1500);
+        setExecFlow((prev) => ({ ...prev, currentStep: 6 }));
         setExecFlow((prev) => ({
           ...prev,
           status: 'complete',
@@ -1079,6 +1098,13 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     await executeDraftThroughPipeline(draft);
   };
 
+  const handleInputChange = (value: string) => {
+    if (execFlow.status !== 'idle') {
+      resetExecutionFlow();
+    }
+    setInput(value);
+  };
+
   const runDueSchedules = async () => {
     const payload = encodeURIComponent(JSON.stringify({ schedules, policy, activity }));
     const resp = await fetch(`/api/cron?payload=${payload}`);
@@ -1390,7 +1416,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             <div className="flex gap-2">
               <input
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={(event) => handleInputChange(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') onSendMessage();
                 }}

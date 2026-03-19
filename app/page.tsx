@@ -1,10 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { connectMetaMask, hasMetaMaskProvider, isMetaMaskUserRejected } from '@/lib/metamask';
-import { storage } from '@/lib/storage';
 import { PaymanLogo } from '@/components/PaymanLogo';
+import { TypewriterHeadline } from '@/components/TypewriterHeadline';
 
 const FEATURE_PILLS = ['Intent Parser', 'Policy Engine', 'Justification Layer', 'Receipt System', 'Audit Trail', 'WDK Wallet'];
 const EXECUTION_STEPS = [
@@ -16,19 +15,6 @@ const EXECUTION_STEPS = [
 ];
 
 export default function LandingPage() {
-  const router = useRouter();
-
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [email, setEmail] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [hasMetaMask, setHasMetaMask] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [ctaPressed, setCtaPressed] = useState(false);
-  const [focusDim, setFocusDim] = useState(false);
-
   const [visibleStepCount, setVisibleStepCount] = useState(0);
   const [validationCount, setValidationCount] = useState(0);
   const [policyCount, setPolicyCount] = useState(0);
@@ -37,8 +23,6 @@ export default function LandingPage() {
   const executionStatus = useMemo(() => (visibleStepCount >= EXECUTION_STEPS.length ? 'Authorized' : 'Pending'), [visibleStepCount]);
 
   useEffect(() => {
-    setHasMetaMask(hasMetaMaskProvider());
-
     const stepTimers = EXECUTION_STEPS.map((_, idx) =>
       setTimeout(() => {
         setVisibleStepCount(idx + 1);
@@ -57,90 +41,45 @@ export default function LandingPage() {
       stepTimers.forEach((timer) => clearTimeout(timer));
       clearInterval(statsTimer);
       clearTimeout(stopStats);
-    };
+      };
   }, []);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.body.style.overflow = showAuthModal ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [showAuthModal]);
-
-  const onExecuteClick = () => {
-    setCtaPressed(true);
-    setFocusDim(true);
-    setAuthError('');
-    setEmailError('');
-    setTimeout(() => setCtaPressed(false), 180);
-    setTimeout(() => {
-      setShowEmailForm(false);
-      setShowAuthModal(true);
-      setFocusDim(false);
-    }, 200);
-  };
-
-  const continueToApp = () => {
-    setShowAuthModal(false);
-    setIsTransitioning(true);
-    setTimeout(() => router.push('/app'), 320);
-  };
-
-  const onViewSystem = () => router.push('/system');
-
-  const handleConnectWallet = async () => {
-    if (authLoading) return;
-    setAuthLoading(true);
-    setAuthError('');
-
-    try {
-      if (!hasMetaMaskProvider()) {
-        setAuthError('MetaMask not detected. Install MetaMask or continue with email demo mode.');
-        setAuthLoading(false);
-        return;
-      }
-
-      const connected = await connectMetaMask();
-      storage.setWalletMode('metamask');
-      storage.setWalletAddress(connected.address);
-      continueToApp();
-    } catch (error) {
-      if (isMetaMaskUserRejected(error)) {
-        setAuthError('Connection request was rejected. Please approve MetaMask access to continue.');
-      } else {
-        setAuthError('MetaMask connection failed. You can continue with email demo mode.');
-      }
-      setAuthLoading(false);
-      return;
-    }
-
-    setAuthLoading(false);
-  };
-
-  const handleEmailSubmit = () => {
-    const normalized = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-      setEmailError('Enter a valid email address to continue.');
-      return;
-    }
-
-    storage.setWalletMode('demo');
-    storage.setWalletAddress(process.env.NEXT_PUBLIC_WALLET_ADDRESS || 'demo_user');
-    storage.setUserEmail(normalized);
-    continueToApp();
-  };
 
   return (
     <main
-      className={`relative min-h-screen overflow-hidden bg-[#0a0a0f] px-5 py-6 text-slate-100 transition-all duration-300 ease-in-out md:px-10 ${
-        isTransitioning ? 'scale-[1.02] opacity-0' : 'scale-100 opacity-100'
-      }`}
+      className="relative min-h-screen overflow-hidden bg-[#0a0a0f] px-5 py-6 text-slate-100 transition-all duration-300 ease-in-out md:px-10"
+      style={{
+        backgroundImage: 'radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)',
+        backgroundSize: '32px 32px'
+      }}
     >
-      <div className="pointer-events-none absolute inset-0 opacity-35 [background:linear-gradient(rgba(148,163,184,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.07)_1px,transparent_1px)] [background-size:54px_54px]" />
-      <div className="pointer-events-none absolute -right-24 -top-16 h-[500px] w-[500px] rounded-full bg-[#7c3aed] opacity-15 blur-[120px]" />
-      <div className="pointer-events-none absolute -bottom-20 -left-10 h-[400px] w-[400px] rounded-full bg-[#00c896] opacity-10 blur-[100px]" />
-      <div className={`pointer-events-none absolute inset-0 bg-black/20 transition-opacity duration-300 ${focusDim ? 'opacity-100' : 'opacity-0'}`} />
+      <div
+        style={{
+          position: 'absolute',
+          top: -100,
+          right: -100,
+          width: 500,
+          height: 500,
+          borderRadius: '50%',
+          background: 'rgba(124,58,237,0.07)',
+          filter: 'blur(100px)',
+          pointerEvents: 'none',
+          zIndex: 0
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: -100,
+          left: -100,
+          width: 400,
+          height: 400,
+          borderRadius: '50%',
+          background: 'rgba(0,200,150,0.06)',
+          filter: 'blur(80px)',
+          pointerEvents: 'none',
+          zIndex: 0
+        }}
+      />
 
       <div className="relative z-10 mx-auto max-w-7xl">
         <nav className="glass-card sticky top-3 z-20 mb-6 flex items-center justify-between rounded-2xl border-b px-5 py-3">
@@ -149,61 +88,67 @@ export default function LandingPage() {
             <span className="hover:text-white">Execution</span>
             <span className="hover:text-white">Policies</span>
             <span className="hover:text-white">Audit</span>
-            <button onClick={onExecuteClick} className="rounded-full bg-[#00c896] px-4 py-1.5 text-xs font-semibold text-black">
+            <Link href="/app" className="rounded-full bg-[#00c896] px-4 py-1.5 text-xs font-semibold text-black">
               Launch App
-            </button>
+            </Link>
           </div>
         </nav>
 
-        <section className="grid min-h-[88vh] items-center gap-8 md:grid-cols-2">
-          <div className="animate-[fadeInUp_500ms_ease-out] space-y-7">
+        <section className="relative z-[1] grid min-h-[88vh] items-center gap-8 md:grid-cols-2">
+          <div className="relative z-[1] animate-[fadeInUp_500ms_ease-out] space-y-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#00c896]/40 bg-[#00c896]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#00c896]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00c896] animate-[pulse_2s_ease-in-out_infinite]" />
               Live
             </div>
 
             <div>
-              <h1 className="text-[42px] font-extrabold leading-[1.1] tracking-[-0.03em] text-white md:text-[72px]">
-                Autonomous payments.
-                <br />
-                That must <span className="underline decoration-[#00c896] decoration-4 underline-offset-4">justify</span> every action.
-              </h1>
+              <TypewriterHeadline />
               <p className="mt-5 max-w-[480px] text-[18px] text-[#6b7280]">
                 Every transaction is validated, enforced, and explained — before it executes.
               </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="glass-card rounded-2xl px-5 py-4">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Validation</p>
+              <div
+                className="glass-card rounded-2xl px-5 py-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0,200,150,0.06), rgba(0,200,150,0.02))',
+                  borderLeft: '3px solid #00c896'
+                }}
+              >
+                <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: '#00c896' }}>VALIDATION</p>
                 <p className="mt-1 text-base font-semibold text-white">{validationCount}-step validation</p>
               </div>
-              <div className="glass-card rounded-2xl px-5 py-4">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Policy</p>
+              <div
+                className="glass-card rounded-2xl px-5 py-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.02))',
+                  borderLeft: '3px solid #7c3aed'
+                }}
+              >
+                <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: '#a78bfa' }}>POLICY</p>
                 <p className="mt-1 text-base font-semibold text-white">{policyCount}% policy-enforced</p>
               </div>
-              <div className="glass-card rounded-2xl px-5 py-4">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-[#6b7280]">Audit</p>
+              <div
+                className="glass-card rounded-2xl px-5 py-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(245,158,11,0.06), rgba(245,158,11,0.02))',
+                  borderLeft: '3px solid #f59e0b'
+                }}
+              >
+                <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: '#f59e0b' }}>AUDIT</p>
                 <p className="mt-1 text-base font-semibold text-white">{auditCount}/24 Full audit trail</p>
               </div>
             </div>
 
             <div>
               <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={onExecuteClick}
-                  className={`rounded-full bg-[#00c896] px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02] hover:brightness-110 ${
-                    ctaPressed ? 'scale-[0.98]' : 'scale-100'
-                  }`}
-                >
+                <Link href="/app" className="rounded-full bg-[#00c896] px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02] hover:brightness-110">
                   Execute with Payman
-                </button>
-                <button
-                  onClick={onViewSystem}
-                  className="rounded-full border border-white/20 bg-transparent px-6 py-3 text-sm text-white transition hover:bg-white/5"
-                >
+                </Link>
+                <Link href="/system" className="rounded-full border border-white/20 bg-transparent px-6 py-3 text-sm text-white transition hover:bg-white/5">
                   View System ↓
-                </button>
+                </Link>
               </div>
               <p className="mt-2 text-xs text-[#6b7280]">Every action is policy-verified before execution.</p>
             </div>
@@ -219,30 +164,413 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="relative grid place-items-center">
-            <div className="pointer-events-none absolute h-[300px] w-[300px] rounded-full bg-[#00c896] opacity-10 blur-[80px]" />
-            <div className="animate-[float_5s_ease-in-out_infinite] relative h-[580px] w-[280px] rotate-[2deg] rounded-[44px] border-2 border-white/15 bg-[#0a0a0f] p-3 shadow-[0_0_60px_rgba(0,200,150,0.15),0_0_120px_rgba(124,58,237,0.1)]">
-              <div className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-black/70" />
-              <div className="h-full rounded-[34px] border border-white/10 bg-[#050508] p-4">
-                <div className="text-center">
-                  <div className="mx-auto flex w-fit items-center justify-center">
-                    <PaymanLogo size="sm" />
+          <div className="relative z-[1]" style={{ minHeight: 640 }}>
+            <svg
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}
+              viewBox="0 0 500 640"
+            >
+              <text x="30" y="80" fill="rgba(0,200,150,0.2)" fontSize="20" fontFamily="monospace">+</text>
+              <text x="440" y="120" fill="rgba(124,58,237,0.2)" fontSize="16" fontFamily="monospace">+</text>
+              <text x="60" y="500" fill="rgba(0,200,150,0.15)" fontSize="18" fontFamily="monospace">+</text>
+              <text x="420" y="540" fill="rgba(245,158,11,0.2)" fontSize="14" fontFamily="monospace">+</text>
+              <circle cx="45" cy="180" r="4" fill="none" stroke="rgba(0,200,150,0.2)" strokeWidth="1.5" />
+              <circle cx="455" cy="380" r="6" fill="none" stroke="rgba(124,58,237,0.2)" strokeWidth="1.5" />
+              <circle cx="112" cy="138" r="30" fill="rgba(124,58,237,0.2)" />
+              <circle cx="392" cy="470" r="24" fill="rgba(124,58,237,0.2)" />
+              <circle cx="80" cy="420" r="3" fill="rgba(0,200,150,0.15)" />
+              <circle cx="430" cy="200" r="3" fill="rgba(245,158,11,0.2)" />
+              <circle cx="470" cy="480" r="5" fill="none" stroke="rgba(0,200,150,0.15)" strokeWidth="1" />
+              <polygon points="35,310 42,300 49,310 42,320" fill="none" stroke="rgba(0,200,150,0.18)" strokeWidth="1.2" />
+              <polygon points="460,300 467,290 474,300 467,310" fill="none" stroke="rgba(124,58,237,0.2)" strokeWidth="1.2" />
+              <g opacity="0.15">
+                {Array.from({ length: 5 }).map((_, row) =>
+                  Array.from({ length: 5 }).map((__, col) => (
+                    <circle key={`${row}-${col}`} cx={360 + col * 16} cy={40 + row * 16} r="1" fill="#00c896" />
+                  ))
+                )}
+              </g>
+              <g opacity="0.10">
+                {Array.from({ length: 4 }).map((_, row) =>
+                  Array.from({ length: 4 }).map((__, col) => (
+                    <circle key={`b${row}-${col}`} cx={20 + col * 14} cy={520 + row * 14} r="1" fill="#7c3aed" />
+                  ))
+                )}
+              </g>
+              <path d="M 20 240 Q 60 200 40 160" fill="none" stroke="rgba(0,200,150,0.12)" strokeWidth="1.5" strokeDasharray="4 4" />
+              <path d="M 440 440 L 460 460 L 440 480" fill="none" stroke="rgba(245,158,11,0.2)" strokeWidth="1.5" strokeLinecap="round" />
+              <rect x="10" y="260" width="56" height="22" rx="11" fill="rgba(0,200,150,0.08)" stroke="rgba(0,200,150,0.2)" strokeWidth="1" />
+              <text x="38" y="275" fill="#00c896" fontSize="9" fontFamily="monospace" textAnchor="middle">USDT ✓</text>
+              <rect x="434" y="340" width="52" height="22" rx="11" fill="rgba(124,58,237,0.08)" stroke="rgba(124,58,237,0.25)" strokeWidth="1" />
+              <text x="460" y="355" fill="#a78bfa" fontSize="9" fontFamily="monospace" textAnchor="middle">WDK</text>
+              <rect x="8" y="450" width="66" height="22" rx="11" fill="rgba(245,158,11,0.08)" stroke="rgba(245,158,11,0.25)" strokeWidth="1" />
+              <text x="41" y="465" fill="#f59e0b" fontSize="9" fontFamily="monospace" textAnchor="middle">POLICY ✓</text>
+            </svg>
+
+            <div className="relative z-[1] flex min-h-[640px] items-center justify-center">
+              <div
+                style={{
+                  position: 'relative',
+                  width: 420,
+                  height: 640
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    zIndex: 0,
+                    width: 280,
+                    height: 280,
+                    background: 'radial-gradient(circle, rgba(124,58,237,0.2), transparent 70%)',
+                    left: -40,
+                    top: 80,
+                    borderRadius: '50%',
+                    filter: 'blur(60px)',
+                    pointerEvents: 'none'
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    zIndex: 0,
+                    width: 320,
+                    height: 320,
+                    background: 'radial-gradient(circle, rgba(0,200,150,0.18), transparent 70%)',
+                    right: -20,
+                    top: 60,
+                    borderRadius: '50%',
+                    filter: 'blur(70px)',
+                    pointerEvents: 'none'
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: -10,
+                    top: 80,
+                    zIndex: 3,
+                    background: 'rgba(0,200,150,0.08)',
+                    border: '1px solid rgba(0,200,150,0.25)',
+                    borderRadius: 20,
+                    padding: '6px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    backdropFilter: 'blur(18px)'
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00c896', flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, color: '#00c896' }}>Policy Active</span>
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: -30,
+                    top: 220,
+                    zIndex: 3,
+                    background: 'rgba(124,58,237,0.08)',
+                    border: '1px solid rgba(124,58,237,0.25)',
+                    borderRadius: 20,
+                    padding: '6px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    backdropFilter: 'blur(18px)'
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, color: '#a78bfa' }}>WDK Secured</span>
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: -20,
+                    bottom: 100,
+                    zIndex: 3,
+                    background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.25)',
+                    borderRadius: 20,
+                    padding: '6px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    backdropFilter: 'blur(18px)'
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, color: '#f59e0b' }}>Audit Trail</span>
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 40,
+                    width: 240,
+                    height: 500,
+                    transform: 'rotate(-6deg) translateX(-20px)',
+                    zIndex: 1,
+                    borderRadius: 40,
+                    border: '6px solid #1a1a2e',
+                    background: 'linear-gradient(160deg, #0f0f1a 0%, #0a0a12 100%)',
+                    boxShadow:
+                      '0 0 0 1px rgba(255,255,255,0.06), 0 40px 80px rgba(0,0,0,0.8), 0 0 60px rgba(124,58,237,0.15)',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      padding: '32px 14px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                      <div
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: 'rgba(0,200,150,0.12)',
+                          color: '#00c896',
+                          display: 'grid',
+                          placeItems: 'center',
+                          fontSize: 10,
+                          fontWeight: 700
+                        }}
+                      >
+                        P
+                      </div>
+                      <div style={{ fontSize: 9, fontFamily: 'monospace', color: '#00c896', letterSpacing: '0.14em' }}>PAYMAN</div>
+                    </div>
+                    <div
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(0,200,150,0.15))',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 16,
+                        padding: 16
+                      }}
+                    >
+                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)' }}>USDT Balance</div>
+                      <div style={{ marginTop: 6, fontSize: 22, fontWeight: 700, color: '#fff' }}>1,250.00</div>
+                      <div style={{ marginTop: 8, fontSize: 8, color: '#22c55e' }}>● Sepolia Testnet</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {[
+                        { dot: '#22c55e', label: 'Payment sent', amount: '−50 USDT', amountColor: '#f87171' },
+                        { dot: '#38bdf8', label: 'Invoice paid', amount: '+200 USDT', amountColor: '#22c55e' },
+                        { dot: '#f59e0b', label: 'Schedule ran', amount: '−100 USDT', amountColor: '#f87171' }
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 0',
+                            borderBottom: '1px solid rgba(255,255,255,0.05)',
+                            fontSize: 9,
+                            color: 'rgba(255,255,255,0.72)'
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: item.dot, flexShrink: 0 }} />
+                          <span>{item.label}</span>
+                          <span style={{ marginLeft: 'auto', color: item.amountColor }}>{item.amount}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[#6b7280]">Execution Engine</p>
                 </div>
-                <div className="glass-card mt-4 rounded-xl p-3 text-sm text-slate-100">Send 20 USDT to vendor for API sprint</div>
-                <div className="mt-4 space-y-2 font-mono text-xs">
-                  {EXECUTION_STEPS.map((step, idx) => {
-                    const visible = visibleStepCount > idx;
-                    const waiting = idx === EXECUTION_STEPS.length - 1;
-                    return (
-                      <p key={step} className={`${visible ? 'animate-[stepIn_300ms_ease-out] opacity-100' : 'opacity-35'} ${waiting ? 'text-amber-300' : 'text-[#00c896]'}`}>
-                        {waiting ? '○' : '✓'} {step}
-                      </p>
-                    );
-                  })}
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 0,
+                    width: 270,
+                    height: 580,
+                    transform: 'rotate(3deg)',
+                    zIndex: 2,
+                    borderRadius: 44,
+                    border: '7px solid #1e1e2e',
+                    background: 'linear-gradient(160deg, #12121f 0%, #0a0a14 100%)',
+                    boxShadow:
+                      '0 0 0 1px rgba(255,255,255,0.08), 0 50px 120px rgba(0,0,0,0.9), 0 0 100px rgba(0,200,150,0.20), 0 0 40px rgba(0,200,150,0.10), inset 0 1px 0 rgba(255,255,255,0.08)',
+                    overflow: 'hidden',
+                    animation: 'phoneFloatFront 4s ease-in-out infinite'
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 100,
+                      height: 28,
+                      background: '#0a0a14',
+                      borderRadius: '0 0 20px 20px',
+                      zIndex: 10
+                    }}
+                  >
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#1a1a2e', margin: '10px auto 0' }} />
+                  </div>
+                  <div style={{ position: 'absolute', right: -8, top: 100, width: 3, height: 56, background: '#1e1e2e', borderRadius: 2 }} />
+                  <div style={{ position: 'absolute', right: -8, top: 180, width: 3, height: 30, background: '#1e1e2e', borderRadius: 2 }} />
+                  <div style={{ position: 'absolute', right: -8, top: 220, width: 3, height: 30, background: '#1e1e2e', borderRadius: 2 }} />
+                  <div style={{ position: 'absolute', left: -8, top: 150, width: 3, height: 44, background: '#1e1e2e', borderRadius: 2 }} />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      padding: '40px 16px 20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <PaymanLogo size="sm" />
+                      <span
+                        style={{
+                          fontSize: 9,
+                          background: 'rgba(0,200,150,0.15)',
+                          border: '1px solid rgba(0,200,150,0.3)',
+                          color: '#00c896',
+                          padding: '3px 8px',
+                          borderRadius: 20
+                        }}
+                      >
+                        ● LIVE
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 8,
+                        fontFamily: 'monospace',
+                        color: 'rgba(0,200,150,0.5)',
+                        letterSpacing: '0.15em',
+                        textAlign: 'center'
+                      }}
+                    >
+                      EXECUTION ENGINE
+                    </div>
+                    <div
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(0,200,150,0.08), rgba(124,58,237,0.06))',
+                        border: '1px solid rgba(0,200,150,0.2)',
+                        borderRadius: 12,
+                        padding: '10px 12px',
+                        fontSize: 11,
+                        color: 'rgba(255,255,255,0.9)',
+                        fontStyle: 'italic',
+                        lineHeight: 1.5
+                      }}
+                    >
+                      "Send 20 USDT to vendor for API sprint"
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {EXECUTION_STEPS.map((step, idx) => {
+                        const visible = visibleStepCount > idx;
+                        const waiting = idx === EXECUTION_STEPS.length - 1;
+                        return (
+                          <div
+                            key={step}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              opacity: visible ? 1 : 0.35
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: waiting ? '#f59e0b' : '#00c896',
+                                animation: waiting ? 'pulseAmber 1.2s ease infinite' : undefined,
+                                display: 'inline-block',
+                                flexShrink: 0
+                              }}
+                            />
+                            <span
+                              style={{
+                                color: waiting ? '#f59e0b' : '#00c896',
+                                fontSize: 10,
+                                fontFamily: 'monospace'
+                              }}
+                            >
+                              {waiting ? `○ ${step}` : `✓ ${step}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 'auto' }}>
+                      {['Budget ✓', 'Whitelist ✓', 'Risk: Low ✓'].map((item) => (
+                        <span
+                          key={item}
+                          style={{
+                            fontSize: 8,
+                            padding: '2px 6px',
+                            borderRadius: 20,
+                            background: 'rgba(0,200,150,0.1)',
+                            border: '1px solid rgba(0,200,150,0.25)',
+                            color: '#00c896'
+                          }}
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      style={{
+                        width: '100%',
+                        padding: 10,
+                        background: 'linear-gradient(135deg, #00c896, #00b584)',
+                        color: '#000',
+                        fontWeight: 800,
+                        fontSize: 12,
+                        borderRadius: 50,
+                        border: 'none',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 24px rgba(0,200,150,0.4), 0 2px 8px rgba(0,200,150,0.2)'
+                      }}
+                    >
+                      {executionStatus} ✓
+                    </button>
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                      {['ERC-20', 'Sepolia', 'WDK'].map((item) => (
+                        <span
+                          key={item}
+                          style={{
+                            fontSize: 7,
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: 'rgba(255,255,255,0.4)',
+                            padding: '2px 6px',
+                            borderRadius: 20
+                          }}
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 8,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 70,
+                      height: 3,
+                      background: 'rgba(255,255,255,0.2)',
+                      borderRadius: 2
+                    }}
+                  />
                 </div>
-                <button className="mt-6 w-full rounded-full bg-[#00c896] py-2 text-sm font-semibold text-black">Authorized ✓</button>
               </div>
             </div>
           </div>
@@ -338,58 +666,6 @@ export default function LandingPage() {
           Built on Tether WDK • Apache 2.0 • Hackathon Galactica 2026
         </footer>
       </div>
-
-      {showAuthModal ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-[#020617]/84 p-4 backdrop-blur-lg">
-          <div className="animate-modal-gateway w-full max-w-md rounded-3xl border border-[#00c896]/35 bg-slate-950/92 p-6 shadow-2xl shadow-black/60">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Authentication</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-100">Access the Execution Engine</h2>
-            <p className="mt-2 text-sm text-slate-400">Authenticate to initiate controlled payments.</p>
-
-            {!showEmailForm ? (
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={handleConnectWallet}
-                  disabled={authLoading}
-                  className="w-full rounded-lg bg-gradient-to-r from-[#00c896] to-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_12px_28px_rgba(0,200,150,0.35)] transition hover:shadow-[0_16px_34px_rgba(0,200,150,0.45)] disabled:opacity-70"
-                >
-                  {authLoading ? 'Connecting...' : 'Connect Wallet'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowEmailForm(true);
-                    setAuthError('');
-                    setEmailError('');
-                  }}
-                  className="w-full rounded-lg border border-white/20 bg-white/[0.02] px-4 py-2.5 text-sm text-slate-100 transition hover:border-white/35"
-                >
-                  Continue with Email
-                </button>
-              </div>
-            ) : (
-              <div className="mt-6 space-y-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full rounded-lg border border-white/20 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-100 outline-none ring-[#00c896] placeholder:text-slate-500 focus:ring-2"
-                />
-                <button
-                  onClick={handleEmailSubmit}
-                  className="w-full rounded-lg border border-white/20 bg-white/[0.02] px-4 py-2.5 text-sm text-slate-100 transition hover:border-white/35"
-                >
-                  Continue
-                </button>
-              </div>
-            )}
-
-            {authError ? <p className="mt-4 text-xs text-amber-300">{authError}</p> : null}
-            {emailError ? <p className="mt-2 text-xs text-amber-300">{emailError}</p> : null}
-            {!hasMetaMask ? <p className="mt-2 text-xs text-slate-500">MetaMask not installed. Email flow remains available.</p> : null}
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

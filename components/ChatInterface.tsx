@@ -6,14 +6,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, RefreshCcw, Settings } from 'lucide-react';
 import { ActivityFeed } from './ActivityFeed';
 import { DraftPaymentCard } from './DraftPaymentCard';
-import { ExecutionFlow, type ExecutionFlowStatus, type ExecutionPaymentDetails } from './ExecutionFlow';
+import { ExecutionFlow, type ExecutionFlowStatus } from './ExecutionFlow';
 import { InvoicesList } from './InvoicesList';
 import { InsightsCards } from './InsightsCards';
 import { MessageBubble } from './MessageBubble';
 import { PaymentConfirmCard } from './PaymentConfirmCard';
 import { PaymentExplanationCard } from './PaymentExplanationCard';
 import { PaymanLogo } from './PaymanLogo';
-import { RejectionCard, type RejectionReason } from './RejectionCard';
 import { SchedulesList } from './SchedulesList';
 import { TransactionHistoryPanel } from './TransactionHistoryPanel';
 import { generateExplanation } from '@/lib/explainer';
@@ -77,6 +76,16 @@ interface InsightsState {
   totalSpent: number;
   last7DaysSpend: number;
   transactionCount: number;
+}
+
+interface ExecFlowState {
+  status: ExecutionFlowStatus;
+  currentStep: number;
+  rejectionReason: string;
+  txHash: string;
+  amount: number;
+  recipient: string;
+  memo: string;
 }
 
 function isValidExplanation(value: unknown): value is PaymentExplanation {
@@ -164,18 +173,15 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const [guidedWhen, setGuidedWhen] = useState('');
   const [showSessionChoice, setShowSessionChoice] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
-  const [executionFlowStep, setExecutionFlowStep] = useState(0);
-  const [executionFlowStatus, setExecutionFlowStatus] = useState<ExecutionFlowStatus>('idle');
-  const [executionFlowReason, setExecutionFlowReason] = useState('');
-  const [executionTxHash, setExecutionTxHash] = useState('');
-  const [executionPaymentDetails, setExecutionPaymentDetails] = useState<ExecutionPaymentDetails | undefined>(undefined);
-  const [rejection, setRejection] = useState<{
-    reason: RejectionReason;
-    attempted: number;
-    limit: number | string;
-    ruleText: string;
-    fixText: string;
-  } | null>(null);
+  const [execFlow, setExecFlow] = useState<ExecFlowState>({
+    status: 'idle',
+    currentStep: 0,
+    rejectionReason: '',
+    txHash: '',
+    amount: 0,
+    recipient: '',
+    memo: ''
+  });
 
   useEffect(() => {
     try {
@@ -270,72 +276,16 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const classifyRejection = (
-    errorText: string,
-    currentDraft: DraftPayment
-  ): { reason: RejectionReason; limit: number | string; ruleText: string; fixText: string } => {
-    const normalized = errorText.toLowerCase();
-
-    if (currentDraft.amount_usdt > policy.max_single_usdt || /max.*single|single.*limit|exceeds.*limit/.test(normalized)) {
-      return {
-        reason: 'amount_exceeded',
-        limit: policy.max_single_usdt,
-        ruleText: `Amount ${currentDraft.amount_usdt} USDT exceeds single limit of ${policy.max_single_usdt} USDT`,
-        fixText: 'Reduce the amount to fit the single-payment limit or raise the limit in Settings.'
-      };
-    }
-
-    if (/daily.*cap|daily.*limit|24h/i.test(normalized)) {
-      return {
-        reason: 'daily_cap_reached',
-        limit: policy.daily_cap_usdt,
-        ruleText: `Daily cap of ${policy.daily_cap_usdt} USDT reached. ${spentToday.toFixed(2)} USDT spent today`,
-        fixText: 'Wait for the daily window to reset or increase the daily cap in Settings.'
-      };
-    }
-
-    if (/whitelist|not approved|not allowed recipient/.test(normalized)) {
-      return {
-        reason: 'whitelist_violation',
-        limit: policy.max_single_usdt,
-        ruleText: 'Recipient not in approved whitelist',
-        fixText: 'Send to an approved address or update the whitelist in Settings.'
-      };
-    }
-
-    if (/memo|required memo|missing memo/.test(normalized)) {
-      return {
-        reason: 'missing_memo',
-        limit: 'Memo required',
-        ruleText: 'This payment requires a justification memo',
-        fixText: 'Add a memo explaining the payment, then try again.'
-      };
-    }
-
-    if (/duplicate|already sent|replay/i.test(normalized)) {
-      return {
-        reason: 'duplicate_payment',
-        limit: policy.block_duplicate_mins,
-        ruleText: `Duplicate payment blocked within ${policy.block_duplicate_mins} minutes`,
-        fixText: 'Wait for the duplicate-protection window to expire or adjust it in Settings.'
-      };
-    }
-
-    return {
-      reason: 'invalid_address',
-      limit: 'Valid 0x address required',
-      ruleText: 'Not a valid Ethereum address',
-      fixText: 'Replace the recipient with a valid Ethereum address before sending.'
-    };
-  };
-
   const resetExecutionFlow = () => {
-    setExecutionFlowStatus('idle');
-    setExecutionFlowReason('');
-    setExecutionFlowStep(0);
-    setExecutionTxHash('');
-    setExecutionPaymentDetails(undefined);
-    setRejection(null);
+    setExecFlow({
+      status: 'idle',
+      currentStep: 0,
+      rejectionReason: '',
+      txHash: '',
+      amount: 0,
+      recipient: '',
+      memo: ''
+    });
   };
 
   const showFlowCompleteChoice = () => {
@@ -452,13 +402,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       .reduce((sum, item) => sum + Number(item.metadata?.amount_usdt || 0), 0);
   }, [activity]);
 
-  const spentToday = useMemo(() => {
-    const today = new Date().toDateString();
-    return activity
-      .filter((item) => item.type === 'payment_sent' && new Date(item.timestamp).toDateString() === today)
-      .reduce((sum, item) => sum + Number(item.metadata?.amount_usdt || 0), 0);
-  }, [activity]);
-
   const fetchWallet = async () => {
     try {
       const response = await fetch('/api/wallet');
@@ -562,21 +505,21 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   const executeDraftThroughPipeline = async (currentDraft: DraftPayment) => {
     setSending(true);
-    setRejection(null);
-    setExecutionFlowStatus('running');
-    setExecutionFlowReason('');
-    setExecutionFlowStep(0);
-    setExecutionTxHash('');
-    setExecutionPaymentDetails({
+    setExecFlow({
+      status: 'running',
+      currentStep: 0,
+      rejectionReason: '',
+      txHash: '',
       amount: currentDraft.amount_usdt,
       recipient: currentDraft.to_address,
-      memo: currentDraft.memo
+      memo: currentDraft.memo || ''
     });
+
     try {
-      await wait(800);
-      setExecutionFlowStep(1);
-      await wait(800);
-      setExecutionFlowStep(2);
+      await wait(700);
+      setExecFlow((prev) => ({ ...prev, currentStep: 1 }));
+      await wait(700);
+      setExecFlow((prev) => ({ ...prev, currentStep: 2 }));
 
       const quoteResponse = await fetch('/api/wallet', {
         method: 'POST',
@@ -592,19 +535,15 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         })
       });
       const quoteData = await quoteResponse.json();
+
       if (!quoteData.ok) {
         const reason = quoteData.error || 'Policy validation failed';
-        const rejectionDetails = classifyRejection(reason, currentDraft);
-        setExecutionFlowStatus('blocked');
-        setExecutionFlowReason(reason);
-        setExecutionFlowStep(2);
-        setRejection({
-          reason: rejectionDetails.reason,
-          attempted: currentDraft.amount_usdt,
-          limit: rejectionDetails.limit,
-          ruleText: rejectionDetails.ruleText,
-          fixText: rejectionDetails.fixText
-        });
+        setExecFlow((prev) => ({
+          ...prev,
+          status: 'blocked',
+          currentStep: 2,
+          rejectionReason: reason
+        }));
         addLocalTransaction({
           recipient: 'Manual payment',
           to_address: currentDraft.to_address,
@@ -623,61 +562,88 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         return;
       }
 
-      await wait(800);
-      setExecutionFlowStep(3);
-      await wait(800);
-      setExecutionFlowStep(4);
+      await wait(700);
+      setExecFlow((prev) => ({ ...prev, currentStep: 3 }));
+      await wait(700);
+      setExecFlow((prev) => ({ ...prev, status: 'awaiting', currentStep: 4 }));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Execution error';
+      setExecFlow((prev) => ({
+        ...prev,
+        status: 'blocked',
+        currentStep: 2,
+        rejectionReason: reason
+      }));
+      setMessages((prev) => [...prev, agentMessage(`Execution error: ${reason}`, 'system')]);
+      showFlowCompleteChoice();
+    } finally {
+      setSending(false);
+    }
+  };
 
+  const handleExecutionConfirm = async () => {
+    if (!draft) return;
+
+    setSending(true);
+    setExecFlow((prev) => ({
+      ...prev,
+      status: 'running',
+      currentStep: 5,
+      rejectionReason: '',
+      txHash: ''
+    }));
+
+    try {
       if (walletMode === 'metamask') {
         try {
-          const tx = await sendUsdtWithMetaMask(currentDraft.to_address, currentDraft.amount_usdt);
-          setExecutionFlowStep(5);
-          await wait(800);
-          const validationResults = evaluatePaymentValidation(currentDraft, policy, activity);
+          const tx = await sendUsdtWithMetaMask(draft.to_address, draft.amount_usdt);
+          const validationResults = evaluatePaymentValidation(draft, policy, activity);
           const explanation = generateExplanation({
             triggerType: 'manual_command',
             policy,
-            draft: currentDraft,
+            draft,
             validationResults
           });
 
           addActivity({
             type: 'payment_sent',
             title: 'USDT payment sent',
-            description: `${currentDraft.amount_usdt} USDT sent to ${currentDraft.to_address}`,
+            description: `${draft.amount_usdt} USDT sent to ${draft.to_address}`,
             metadata: {
-              to_address: currentDraft.to_address,
-              amount_usdt: currentDraft.amount_usdt,
+              to_address: draft.to_address,
+              amount_usdt: draft.amount_usdt,
               tx_hash: tx.txHash,
-              memo: currentDraft.memo || '',
+              memo: draft.memo || '',
               fallback: false,
               wallet_mode: 'metamask'
             }
           });
           addLocalTransaction({
             recipient: 'Manual payment',
-            to_address: currentDraft.to_address,
-            amount_usdt: currentDraft.amount_usdt,
+            to_address: draft.to_address,
+            amount_usdt: draft.amount_usdt,
             status: 'success',
             tx_hash: tx.txHash
           });
           await persistTransaction({
-            toAddress: currentDraft.to_address,
-            amount: currentDraft.amount_usdt,
-            memo: currentDraft.memo,
+            toAddress: draft.to_address,
+            amount: draft.amount_usdt,
+            memo: draft.memo,
             txHash: tx.txHash,
             status: 'success'
           });
-
           setMessages((prev) => [
             ...prev,
             agentMessage(`Transaction submitted via MetaMask. Tx: ${tx.txHash}\nExplorer: ${tx.explorerUrl}`, 'system')
           ]);
           setPaymentExplanations((prev) => [...prev, { id: generateId('exp'), explanation }]);
           setDraft(null);
-          setExecutionTxHash(tx.txHash);
-          setExecutionFlowStep(6);
-          setExecutionFlowStatus('complete');
+          setExecFlow((prev) => ({
+            ...prev,
+            status: 'complete',
+            currentStep: 6,
+            txHash: tx.txHash
+          }));
           await refreshMetaMaskWallet();
           showFlowCompleteChoice();
           return;
@@ -685,63 +651,54 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           if (isMetaMaskUserRejected(error)) {
             addLocalTransaction({
               recipient: 'Manual payment',
-              to_address: currentDraft.to_address,
-              amount_usdt: currentDraft.amount_usdt,
+              to_address: draft.to_address,
+              amount_usdt: draft.amount_usdt,
               status: 'failed',
-              failure_reason: 'User rejected MetaMask confirmation'
+              failure_reason: 'User rejected wallet confirmation'
             });
-            setExecutionFlowStatus('blocked');
-            setExecutionFlowReason('User rejected wallet confirmation');
-            setExecutionFlowStep(4);
-            setRejection(null);
+            setExecFlow((prev) => ({
+              ...prev,
+              status: 'blocked',
+              currentStep: 4,
+              rejectionReason: 'User rejected wallet confirmation'
+            }));
             setMessages((prev) => [...prev, agentMessage('Execution cancelled: MetaMask authorization rejected.', 'system')]);
             showFlowCompleteChoice();
             return;
           }
+
           console.warn('MetaMask failed, falling back', error);
           setWalletMode('demo');
-          const fallbackResult = await executeApiPayment(currentDraft);
-          if (fallbackResult.ok) {
-            setExecutionTxHash(fallbackResult.txHash || '');
-            setExecutionFlowStep(5);
-            await wait(800);
-            setExecutionFlowStep(6);
-            setExecutionFlowStatus('complete');
-            setRejection(null);
-          } else {
-            setExecutionFlowStatus('blocked');
-            setExecutionFlowReason(fallbackResult.error || 'Execution failed');
-            setExecutionFlowStep(5);
-            setRejection(null);
-          }
-          showFlowCompleteChoice();
-          return;
         }
       }
 
-      const sendResult = await executeApiPayment(currentDraft);
+      const sendResult = await executeApiPayment(draft);
       if (sendResult.ok) {
-        setExecutionTxHash(sendResult.txHash || '');
-        setExecutionFlowStep(5);
-        await wait(800);
-        setExecutionFlowStep(6);
-        setExecutionFlowStatus('complete');
-        setRejection(null);
+        setExecFlow((prev) => ({
+          ...prev,
+          status: 'complete',
+          currentStep: 6,
+          txHash: sendResult.txHash || ''
+        }));
       } else {
-        setExecutionFlowStatus('blocked');
-        setExecutionFlowReason(sendResult.error || 'Execution failed');
-        setExecutionFlowStep(5);
-        setRejection(null);
+        setExecFlow((prev) => ({
+          ...prev,
+          status: 'blocked',
+          currentStep: 5,
+          rejectionReason: sendResult.error || 'Execution failed'
+        }));
       }
       showFlowCompleteChoice();
     } catch (error) {
-      setExecutionFlowStatus('blocked');
-      setExecutionFlowReason(error instanceof Error ? error.message : 'Execution error');
-      setRejection(null);
-      setMessages((prev) => [
+      const reason = error instanceof Error ? error.message : 'Execution error';
+      setExecFlow((prev) => ({
         ...prev,
-        agentMessage(`Execution error: ${error instanceof Error ? error.message : 'unknown error'}`, 'system')
-      ]);
+        status: 'blocked',
+        currentStep: 5,
+        rejectionReason: reason
+      }));
+      setMessages((prev) => [...prev, agentMessage(`Execution error: ${reason}`, 'system')]);
+      showFlowCompleteChoice();
     } finally {
       setSending(false);
     }
@@ -1249,7 +1206,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Loading Payman...</div>;
   }
 
-  const showConfirm = Boolean(draft?.to_address && draft?.amount_usdt);
+  const showConfirm = Boolean(draft?.to_address && draft?.amount_usdt && execFlow.status === 'idle');
 
   return (
     <div className="min-h-screen">
@@ -1414,28 +1371,20 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           </div>
 
           <div className="border-t border-white/10 p-4">
-            {executionFlowStatus !== 'idle' && (
-              <div className="mb-4 space-y-3">
+            {execFlow.status !== 'idle' && (
+              <div className="mb-4">
                 <ExecutionFlow
-                  currentStep={executionFlowStep}
-                  status={executionFlowStatus}
-                  rejectionReason={executionFlowReason}
-                  txHash={executionTxHash}
-                  paymentDetails={executionPaymentDetails}
-                  onEditPayment={resetExecutionFlow}
+                  currentStep={execFlow.currentStep}
+                  status={execFlow.status}
+                  rejectionReason={execFlow.rejectionReason}
+                  txHash={execFlow.txHash}
+                  amount={execFlow.amount}
+                  recipient={execFlow.recipient}
+                  memo={execFlow.memo}
+                  onConfirm={handleExecutionConfirm}
+                  onRetry={resetExecutionFlow}
                   onOpenSettings={() => router.push('/settings')}
                 />
-                {rejection ? (
-                  <RejectionCard
-                    reason={rejection.reason}
-                    attempted={rejection.attempted}
-                    limit={rejection.limit}
-                    ruleText={rejection.ruleText}
-                    fixText={rejection.fixText}
-                    onEditAmount={resetExecutionFlow}
-                    onOpenSettings={() => router.push('/settings')}
-                  />
-                ) : null}
               </div>
             )}
             <div className="flex gap-2">

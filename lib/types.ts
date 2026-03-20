@@ -68,7 +68,10 @@ export type ActivityType =
   | 'schedule_failed'
   | 'schedule_paused'
   | 'low_balance_warning'
-  | 'github_payment_released';
+  | 'github_payment_released'
+  | 'aave_deposit'
+  | 'aave_withdraw'
+  | 'yield_earned';
 
 export interface ActivityItem {
   id: string;

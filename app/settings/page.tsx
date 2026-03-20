@@ -47,6 +47,9 @@ export default function SettingsPage() {
   const [newAddress, setNewAddress] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [whitelistLabels, setWhitelistLabels] = useState<Record<string, string>>({});
+  const [autoAave, setAutoAave] = useState(false);
+  const [aaveReserve, setAaveReserve] = useState(100);
+  const [aaveThreshold, setAaveThreshold] = useState(200);
 
   useEffect(() => {
     const currentWallet = getWalletId();
@@ -76,6 +79,15 @@ export default function SettingsPage() {
     } catch {
       setWhitelistLabels({});
     }
+
+    try {
+      const savedAutoAave = localStorage.getItem('payman_auto_aave');
+      if (savedAutoAave) setAutoAave(JSON.parse(savedAutoAave) as boolean);
+      const savedReserve = localStorage.getItem('payman_aave_reserve');
+      if (savedReserve) setAaveReserve(Number(savedReserve));
+      const savedThreshold = localStorage.getItem('payman_aave_threshold');
+      if (savedThreshold) setAaveThreshold(Number(savedThreshold));
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -315,6 +327,70 @@ export default function SettingsPage() {
                   className="w-full bg-transparent text-lg text-white outline-none"
                 />
                 <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">minutes</span>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-violet-500/20 bg-violet-500/[0.03] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-violet-400">Section 4</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Yield Strategy</h2>
+              <p className="mt-1 text-sm text-slate-500">Auto-deposit idle USDT to Aave V3 on Sepolia to earn yield.</p>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-400/10 px-3 py-2 font-mono text-xs text-violet-300">
+              ~4.2% APY on Sepolia
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4">
+            <div>
+              <p className="text-sm text-slate-100">Auto-deposit idle funds to Aave</p>
+              <p className="mt-1 text-xs text-slate-500">Automatically deposit USDT above the threshold to earn yield.</p>
+            </div>
+            <Toggle
+              checked={autoAave}
+              onChange={() => {
+                const next = !autoAave;
+                setAutoAave(next);
+                localStorage.setItem('payman_auto_aave', JSON.stringify(next));
+              }}
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="text-sm text-slate-300">Keep liquid reserve</span>
+              <div className="mt-2 flex items-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <input
+                  type="number"
+                  value={aaveReserve}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || 100);
+                    setAaveReserve(v);
+                    localStorage.setItem('payman_aave_reserve', String(v));
+                  }}
+                  className="w-full bg-transparent text-lg text-white outline-none"
+                />
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDT</span>
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="text-sm text-slate-300">Auto-deposit threshold</span>
+              <div className="mt-2 flex items-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <input
+                  type="number"
+                  value={aaveThreshold}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || 200);
+                    setAaveThreshold(v);
+                    localStorage.setItem('payman_aave_threshold', String(v));
+                  }}
+                  className="w-full bg-transparent text-lg text-white outline-none"
+                />
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDT</span>
               </div>
             </label>
           </div>

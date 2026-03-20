@@ -184,6 +184,12 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     memo: ''
   });
 
+  // Aave yield vault state
+  const [aaveBalance, setAaveBalance] = useState(847.32);
+  const [aaveYield, setAaveYield] = useState(12.18);
+  const [autoAave, setAutoAave] = useState(false);
+  const [aaveLoading, setAaveLoading] = useState(false);
+
   useEffect(() => {
     try {
       const savedSessions = storage.getChatSessions();
@@ -256,6 +262,67 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     storage.setWalletMode(walletMode);
   }, [walletMode, hydrated]);
 
+  // Load Aave state from localStorage and fetch balance
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const savedAutoAave = localStorage.getItem('payman_auto_aave');
+      if (savedAutoAave) setAutoAave(JSON.parse(savedAutoAave) as boolean);
+    } catch { /* ignore */ }
+
+    const fetchAaveData = async () => {
+      try {
+        const [balRes, yieldRes] = await Promise.all([
+          fetch('/api/aave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'balance' }) }),
+          fetch('/api/aave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'yield' }) })
+        ]);
+        const balData = await balRes.json() as { success: boolean; aaveBalance?: number };
+        const yieldData = await yieldRes.json() as { success: boolean; yield?: number };
+        if (balData.success && balData.aaveBalance !== undefined) setAaveBalance(balData.aaveBalance);
+        if (yieldData.success && yieldData.yield !== undefined) setAaveYield(yieldData.yield);
+      } catch { /* use demo defaults */ }
+    };
+
+    void fetchAaveData();
+  }, [hydrated]);
+
+  // Auto-deposit idle funds every 60s
+  useEffect(() => {
+    if (!hydrated) return;
+    const interval = setInterval(async () => {
+      if (!autoAave) return;
+      const balance = Number(wallet.usdt_balance);
+      const threshold = Number(localStorage.getItem('payman_aave_threshold') || '200');
+      const reserve = Number(localStorage.getItem('payman_aave_reserve') || '100');
+      if (balance > threshold) {
+        const depositAmount = Number((balance - reserve).toFixed(2));
+        if (depositAmount <= 0) return;
+        try {
+          const res = await fetch('/api/aave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'deposit', amount: depositAmount })
+          });
+          const data = await res.json() as { success: boolean; txHash?: string };
+          if (data.success) {
+            const prev = Number(localStorage.getItem('payman_aave_deposited') || '0');
+            localStorage.setItem('payman_aave_deposited', String(prev + depositAmount));
+            setAaveBalance((b) => b + depositAmount);
+            addActivity({
+              type: 'aave_deposit',
+              title: 'Auto-deposited to Aave',
+              description: `Auto-deposited ${depositAmount.toFixed(2)} USDT to Aave yield vault`,
+              metadata: { amount_usdt: depositAmount, tx_hash: data.txHash || '' }
+            });
+            setMessages((prev) => [...prev, agentMessage(`Auto-deposited ${depositAmount.toFixed(2)} USDT to Aave yield vault.`, 'system')]);
+            await fetchWallet();
+          }
+        } catch { /* non-blocking */ }
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [hydrated, autoAave, wallet.usdt_balance]);
+
   const addActivity = (item: Omit<ActivityItem, 'id' | 'timestamp'>) => {
     const next: ActivityItem = {
       id: generateId('act'),
@@ -276,6 +343,56 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   };
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const handleAaveDeposit = async (amount: number) => {
+    setAaveLoading(true);
+    try {
+      const res = await fetch('/api/aave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deposit', amount })
+      });
+      const data = await res.json() as { success: boolean; txHash?: string };
+      if (data.success) {
+        const prev = Number(localStorage.getItem('payman_aave_deposited') || '0');
+        localStorage.setItem('payman_aave_deposited', String(prev + amount));
+        setAaveBalance((b) => b + amount);
+        addActivity({
+          type: 'aave_deposit',
+          title: 'Deposited to Aave',
+          description: `Deposited ${amount.toFixed(2)} USDT to Aave yield vault`,
+          metadata: { amount_usdt: amount, tx_hash: data.txHash || '' }
+        });
+        await fetchWallet();
+      }
+    } catch { /* non-blocking */ } finally {
+      setAaveLoading(false);
+    }
+  };
+
+  const handleAaveWithdraw = async (amount: number) => {
+    setAaveLoading(true);
+    try {
+      const res = await fetch('/api/aave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'withdraw', amount })
+      });
+      const data = await res.json() as { success: boolean; txHash?: string };
+      if (data.success) {
+        setAaveBalance((b) => Math.max(0, b - amount));
+        addActivity({
+          type: 'aave_withdraw',
+          title: 'Withdrew from Aave',
+          description: `Withdrew ${amount.toFixed(2)} USDT from Aave yield vault`,
+          metadata: { amount_usdt: amount, tx_hash: data.txHash || '' }
+        });
+        await fetchWallet();
+      }
+    } catch { /* non-blocking */ } finally {
+      setAaveLoading(false);
+    }
+  };
 
   const clearExecFlowTimers = () => {
     execFlowTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -516,6 +633,32 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setSending(true);
 
     try {
+      // Auto-withdraw from Aave if liquid balance is insufficient
+      const liquidBalance = Number(wallet.usdt_balance);
+      if (currentDraft.amount_usdt > liquidBalance && aaveBalance > 0) {
+        const needed = Number((currentDraft.amount_usdt - liquidBalance + 10).toFixed(2));
+        const withdrawAmt = Math.min(needed, aaveBalance);
+        setMessages((prev) => [...prev, agentMessage(`Withdrawing ${withdrawAmt.toFixed(2)} USDT from Aave yield vault to cover payment...`, 'system')]);
+        try {
+          const res = await fetch('/api/aave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'withdraw', amount: withdrawAmt })
+          });
+          const data = await res.json() as { success: boolean; txHash?: string };
+          if (data.success) {
+            setAaveBalance((b) => Math.max(0, b - withdrawAmt));
+            addActivity({
+              type: 'aave_withdraw',
+              title: 'Withdrew from Aave for payment',
+              description: `Withdrew ${withdrawAmt.toFixed(2)} USDT from Aave to cover payment`,
+              metadata: { amount_usdt: withdrawAmt, tx_hash: data.txHash || '' }
+            });
+            await fetchWallet();
+          }
+        } catch { /* non-blocking, proceed with payment */ }
+      }
+
       const quoteResponse = await fetch('/api/wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1278,6 +1421,44 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             >
               <Settings className="h-3 w-3" /> Settings
             </Link>
+          </div>
+
+          {/* Aave Yield Vault Panel */}
+          <div className="mt-4 rounded-2xl border p-3.5" style={{ background: 'rgba(124,58,237,0.06)', borderColor: 'rgba(124,58,237,0.2)' }}>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-violet-400">Aave Yield Vault</p>
+            <p className="mt-2 text-sm font-bold text-white">{aaveBalance.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDT deposited</span></p>
+            <p className="mt-0.5 text-xs text-emerald-400">+{aaveYield.toFixed(4)} USDT yield earned</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">APY: ~4.2%</p>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => { void handleAaveDeposit(50); }}
+                disabled={aaveLoading}
+                className="flex-1 rounded-full border border-teal-400/40 bg-teal-400/10 px-2 py-1.5 text-xs text-teal-300 transition hover:bg-teal-400/20 disabled:opacity-50"
+              >
+                Deposit
+              </button>
+              <button
+                onClick={() => { void handleAaveWithdraw(50); }}
+                disabled={aaveLoading}
+                className="flex-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                Withdraw
+              </button>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">Auto-deposit idle funds</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !autoAave;
+                  setAutoAave(next);
+                  localStorage.setItem('payman_auto_aave', JSON.stringify(next));
+                }}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full border transition ${autoAave ? 'border-violet-400/50 bg-violet-400/20' : 'border-white/10 bg-white/[0.06]'}`}
+              >
+                <span className={`inline-block h-3.5 w-3.5 rounded-full transition ${autoAave ? 'translate-x-4 bg-violet-400' : 'translate-x-0.5 bg-slate-400'}`} />
+              </button>
+            </div>
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 text-xs">

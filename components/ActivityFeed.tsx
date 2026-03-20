@@ -22,7 +22,10 @@ const config = {
   schedule_failed: { icon: XCircle, className: 'text-red-300 border-red-400/30 bg-red-500/10' },
   schedule_paused: { icon: CircleDashed, className: 'text-amber-300 border-amber-400/30 bg-amber-500/10' },
   low_balance_warning: { icon: AlertTriangle, className: 'text-amber-300 border-amber-400/30 bg-amber-500/10' },
-  github_payment_released: { icon: Github, className: 'text-slate-200 border-slate-600 bg-slate-700/20' }
+  github_payment_released: { icon: Github, className: 'text-slate-200 border-slate-600 bg-slate-700/20' },
+  aave_deposit: { icon: ArrowRightLeft, className: 'text-violet-300 border-violet-400/30 bg-violet-500/10' },
+  aave_withdraw: { icon: ArrowRightLeft, className: 'text-violet-300 border-violet-400/30 bg-violet-500/10' },
+  yield_earned: { icon: CheckCircle, className: 'text-emerald-300 border-emerald-400/30 bg-emerald-500/10' }
 } as const;
 
 export function ActivityFeed({ items }: { items: ActivityItem[] }) {

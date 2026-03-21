@@ -1,103 +1,163 @@
 # Payman
 
-Payman is an autonomous USDT payment agent: users type natural-language commands, and the app converts those commands into structured draft actions with explicit confirmation before any transfer. It is designed as a "ChatGPT with a bank account" demo for the Tether WDK hackathon, with policy guardrails, recurring schedules, invoice workflows, and proactive monitoring.
+**Autonomous payments. That must justify every action.**
 
-The product experience focuses on safe execution and demo reliability. If live blockchain, Claude API, or webhook dependencies are unavailable, Payman falls back to deterministic parsing and clearly marked simulation paths so the demo remains fully usable end-to-end.
+Payman is a **policy-enforced execution layer** where every transaction is validated, constrained, and explained *before* it is allowed to execute.
 
-## Core Features
+This is not a payment app.
 
-- Natural-language chat for send, schedule, invoice, and query intents
-- Multi-turn draft payment flow with explicit confirmation gate
-- Policy guardrails (single cap, daily cap, whitelist, duplicate blocking, memo rules)
-- Wallet API with WDK-first transfer flow and ethers fallback
-- Prisma + SQLite persistence for users, transactions, policy, and insights
-- Recurring schedule CRUD and due-payment execution endpoint
-- Invoice generation, shareable invoice page, and status watcher
-- Activity feed with typed event system and color-coded statuses
-- Proactive monitors for overdue invoices and low-balance warnings
-- GitHub webhook endpoint with signature verification and trigger messaging
+This is a system that decides whether a payment is allowed to exist.
 
-## Architecture Summary
+---
 
-- Next.js 14 App Router + TypeScript + Tailwind CSS
-- Client state persistence via localStorage keys:
-  - `payman_messages`
-  - `payman_draft`
-  - `payman_policy`
-  - `payman_activity`
-  - `payman_schedules`
-  - `payman_invoices`
-- API routes:
-  - `/api/agent` Claude parser + deterministic fallback parser
-  - `/api/wallet` guardrail checks, quote, send, wallet balance
-  - `/api/transactions` persistent transaction history
-  - `/api/policy` persistent policy engine
-  - `/api/insights` computed financial insights
-  - `/api/schedule` schedule CRUD
-  - `/api/cron` due schedule execution pipeline
-  - `/api/webhooks/github` signed webhook trigger
-- WDK integration in `lib/wdk.ts` using actual account methods (`getAccount`, `getAddress`, `getTokenBalance`, `quoteTransfer`, `transfer`) with ethers-based ERC20 fallback.
+## 🚨 Problem
 
-## Setup
+Today’s systems can execute transactions autonomously.
 
-1. Install dependencies:
+But they cannot answer:
 
-```bash
-npm install
-```
+- Should this payment happen?
+- Does it violate constraints?
+- Who is accountable if it goes wrong?
 
-2. Create your local environment file:
+As AI agents and automation scale, this becomes dangerous.
 
-```bash
-cp .env.example .env.local
-```
+---
 
-3. Start development server:
+## 💡 Solution
 
-```bash
-npm run dev
-```
+Payman introduces a **policy-first execution model**:
 
-## Stability Workflow
+> Every transaction must satisfy defined constraints before execution.
 
-- Before major demos or large refactors, clear build artifacts to avoid stale chunk issues:
+Each action is:
+- **Evaluated**
+- **Enforced**
+- **Verified**
+- **Auditable**
 
-```bash
-rm -rf .next
-```
-- Use a consistent Node.js runtime (current validated: `v20.20.0`) across all environments.
+---
 
-4. Initialize Prisma database (first run):
+## ⚙️ How It Works
 
-```bash
-npm run prisma:generate
-npm run prisma:push
-```
+1. User or agent requests a transaction  
+2. Payman evaluates it against policy constraints  
+3. System decides:
+   - ✅ Execute  
+   - ❌ Block  
+4. If executed:
+   - Transaction is sent on-chain
+   - Hash is generated
+   - Proof is publicly verifiable (Etherscan)
+5. UI reflects:
+   - Real-time status
+   - Execution result
+   - Verifiable proof
 
-## Environment Variables
+---
 
-- `ANTHROPIC_API_KEY` - Optional Claude parser key
-- `WDK_SEED_PHRASE` - Seed phrase for wallet initialization
-- `DATABASE_URL` - SQLite connection string (default `file:./dev.db`)
-- `NEXT_PUBLIC_WALLET_ADDRESS` - Optional display fallback address
-- `NEXT_PUBLIC_WDK_INDEXER_BASE_URL` - Optional indexer base URL
-- `WDK_INDEXER_API_KEY` - Optional indexer API key
-- `ETHEREUM_RPC_URL` - Sepolia RPC URL
-- `GITHUB_WEBHOOK_SECRET` - Secret for GitHub webhook signature verification
-- `SEPOLIA_USDT_ADDRESS` - Optional token address for live Sepolia USDT transfer
-- `NEXT_PUBLIC_SEPOLIA_USDT_ADDRESS` - Browser-side USDT contract for MetaMask transfer mode
+## 🔐 Core Features
 
-## Third-Party Disclosures
+### 1. Policy-Enforced Execution
+- Transactions must satisfy rules before execution
+- Prevents unsafe or unauthorized actions
 
-- Anthropic Claude API is used when `ANTHROPIC_API_KEY` is configured.
-- An EVM RPC provider (for example Alchemy or another Sepolia endpoint) is required for live chain reads/writes.
+### 2. Real-Time System State
+- Live execution status (auto-refresh)
+- Based on actual transaction data
 
-## Demo Fallback Notes
+### 3. Verified Execution
+- Only real successful transactions are shown
+- Each includes:
+  - Transaction hash
+  - Explorer link
+  - Timestamp (relative + exact)
 
-- If Claude is unavailable, deterministic regex/rule-based parsing remains active.
-- If WDK or token transfer execution is unavailable in the runtime, Payman returns clearly marked demo-mode tx hashes while preserving all guardrail checks.
-- Invoice watcher and proactive monitors use robust local activity matching for a reliable demo flow.
+### 4. Transparent Failure
+- Clear system feedback:
+  - “Execution blocked by policy”
+  - “Execution request initiated”
 
-## License
+### 5. Trust Layer UI
+- No mock data
+- No fake states
+- Everything reflects real system behavior
 
-This project is intended for Apache 2.0 licensed usage patterns, consistent with Tether WDK ecosystem licensing.
+---
+
+## 🧠 Why This Matters
+
+Payman shifts systems from:
+
+> “Execute first, validate later”
+
+to:
+
+> “Validate first, then execute”
+
+This is critical for:
+
+- Autonomous AI agents
+- Financial safety systems
+- On-chain accountability
+- Regulatory-grade execution layers
+
+---
+
+## 🏗️ Tech Stack
+
+- **Frontend**: Next.js + TypeScript
+- **Blockchain**: Ethereum (transaction execution + verification)
+- **State Handling**: Real transaction-driven UI (no mock data)
+- **UX Philosophy**: System clarity > visual decoration
+
+---
+
+## 🔍 What Makes Payman Different
+
+| Traditional Systems | Payman |
+|--------------------|--------|
+| Execute blindly | Enforce before execution |
+| No reasoning | Policy-based decisions |
+| Limited transparency | Fully verifiable |
+| UI ≠ reality | UI = real system state |
+
+---
+
+## 📡 Live System Signals
+
+- Execution Engine Status (live)
+- Latest Transaction Hash
+- Relative Time + Exact Timestamp
+- Explorer Verification Links
+
+---
+
+## 🧪 Example Outcomes
+
+- ✅ Valid transaction → Executed + Verified  
+- ❌ Policy violation → Blocked with explanation  
+
+---
+
+## 🔮 Vision
+
+Payman is building toward:
+
+> A future where autonomous systems are not just powerful — but **bounded, explainable, and accountable**.
+
+---
+
+## 🏁 Summary
+
+Payman is a **policy-enforced execution layer** that ensures:
+
+- No transaction executes without validation  
+- Every action is explainable  
+- Every result is verifiable  
+
+---
+
+## ⚡ One Line
+
+**“Every transaction must justify itself before it executes.”**

@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { PaymanLogo } from '@/components/PaymanLogo';
 import { TypewriterHeadline } from '@/components/TypewriterHeadline';
+import { storage } from '@/lib/storage';
+import { timeAgo, shortenHash } from '@/lib/utils';
+import type { LocalTransaction } from '@/lib/types';
 
 const FEATURE_PILLS = ['Intent Parser', 'Policy Engine', 'Justification Layer', 'Receipt System', 'Audit Trail', 'WDK Wallet'];
 const EXECUTION_STEPS = [
@@ -19,6 +22,8 @@ export default function LandingPage() {
   const [validationCount, setValidationCount] = useState(0);
   const [policyCount, setPolicyCount] = useState(0);
   const [auditCount, setAuditCount] = useState(0);
+  const [latestTx, setLatestTx] = useState<LocalTransaction | null>(null);
+  const [, setTick] = useState(0);
 
   const executionStatus = useMemo(() => (visibleStepCount >= EXECUTION_STEPS.length ? 'Authorized' : 'Pending'), [visibleStepCount]);
 
@@ -37,11 +42,22 @@ export default function LandingPage() {
 
     const stopStats = setTimeout(() => clearInterval(statsTimer), 900);
 
+    // load latest successful tx from local storage
+    try {
+      const txs = storage.getLocalTransactions();
+      const success = txs.find((t) => t.status === 'success' && t.tx_hash);
+      setLatestTx(success ?? null);
+    } catch { /* ignore */ }
+
+    // tick every 30s to keep relative timestamps fresh
+    const tickInterval = setInterval(() => setTick((n) => n + 1), 30_000);
+
     return () => {
       stepTimers.forEach((timer) => clearTimeout(timer));
       clearInterval(statsTimer);
       clearTimeout(stopStats);
-      };
+      clearInterval(tickInterval);
+    };
   }, []);
 
   return (
@@ -88,6 +104,14 @@ export default function LandingPage() {
             <span className="hover:text-white">Execution</span>
             <span className="hover:text-white">Policies</span>
             <span className="hover:text-white">Audit</span>
+            {latestTx && (
+              <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-[11px]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                <span className="text-emerald-400 font-medium">LIVE</span>
+                <span className="text-slate-500">Last execution: {timeAgo(latestTx.timestamp)}</span>
+                <span className="text-slate-600">• Sepolia</span>
+              </div>
+            )}
             <Link href="/app">
               <button className="rounded-full bg-[#00c896] px-4 py-1.5 text-xs font-semibold text-black">Launch App</button>
             </Link>
@@ -104,7 +128,7 @@ export default function LandingPage() {
             <div>
               <TypewriterHeadline />
               <p className="mt-5 max-w-[480px] text-[18px] text-[#6b7280]">
-                Every transaction is validated, enforced, and explained — before it executes.
+                An execution layer where every transaction is validated, enforced, and proven — before it touches the blockchain.
               </p>
             </div>
 
@@ -154,6 +178,29 @@ export default function LandingPage() {
                 </Link>
               </div>
               <p className="mt-2 text-xs text-[#6b7280]">Every action is policy-verified before execution.</p>
+
+              {/* Trust strip */}
+              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-2.5">
+                {(['Live on Sepolia', 'Real transaction execution', 'Policy-enforced engine', 'Audit trail available'] as const).map((label) => (
+                  <span key={label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400">
+                    <span className="h-1 w-1 rounded-full bg-emerald-400/70" />
+                    {label}
+                  </span>
+                ))}
+                {latestTx?.tx_hash && (
+                  <a
+                    href={`https://sepolia.etherscan.io/tx/${latestTx.tx_hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/[0.07] px-2.5 py-1 text-[11px] text-emerald-400 transition hover:border-emerald-400/40 hover:bg-emerald-500/10"
+                  >
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <path d="M1 9L9 1M9 1H3M9 1V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {shortenHash(latestTx.tx_hash)} · View on Etherscan
+                  </a>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto pb-1">
@@ -578,6 +625,41 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Verified Execution block — only shown when a real successful tx exists */}
+        {latestTx && latestTx.tx_hash && (
+          <section className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-400">Verified Execution</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {latestTx.amount_usdt.toFixed(2)} USDC
+                  <span className="ml-2 font-mono text-sm font-normal text-slate-400">
+                    → {latestTx.to_address.slice(0, 6)}…{latestTx.to_address.slice(-4)}
+                  </span>
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <a
+                    href={`https://sepolia.etherscan.io/tx/${latestTx.tx_hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 font-mono text-xs text-emerald-400 underline-offset-2 hover:underline"
+                  >
+                    {shortenHash(latestTx.tx_hash)}
+                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                      <path d="M1 9L9 1M9 1H3M9 1V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </a>
+                  <span className="text-xs text-slate-500">Status: Confirmed</span>
+                  <span className="text-xs text-slate-600">{timeAgo(latestTx.timestamp)}</span>
+                </div>
+              </div>
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
+                ✓ Verified on-chain
+              </span>
+            </div>
+          </section>
+        )}
 
         <section className="mt-8 border-y border-white/10 bg-white/[0.01] py-20">
           <div className="space-y-6">

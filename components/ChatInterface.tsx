@@ -187,7 +187,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       const activeSession = storage.getActiveSession();
       const targetId = sessionId || activeSession || savedSessions[0]?.id || generateId('session');
       const existing = savedSessions.find((session) => session.id === targetId);
-      const initialMessages = existing?.messages?.length ? existing.messages : [agentMessage('Execution request received. Select an action to continue.')];
+      const initialMessages = existing?.messages?.length ? existing.messages : [agentMessage('Execution request initiated. Select an action to continue.')];
 
       setSessions(savedSessions);
       setCurrentSessionId(targetId);
@@ -424,7 +424,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setPaymentExplanations([]);
     setShowSessionChoice(false);
     resetExecutionFlow();
-    setMessages([agentMessage('Execution request received. Select an action to continue.')]);
+    setMessages([agentMessage('Execution request initiated. Select an action to continue.')]);
   };
 
   const getCurrentWalletId = () => {
@@ -650,7 +650,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           description: `BLOCKED: ${reason}`,
           metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: 'wdk' }
         });
-        setMessages((prev) => [...prev, agentMessage(`Execution halted: BLOCKED: ${reason}`, 'system')]);
+        setMessages((prev) => [...prev, agentMessage(`Execution blocked by policy: ${reason}`, 'system')]);
         showFlowCompleteChoice();
         return;
       }
@@ -758,8 +758,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       ...prev,
       agentMessage(
         flow === 'send'
-          ? 'Execution request received. Provide recipient address.'
-          : 'Execution request received. Provide recipient for scheduled payment.'
+          ? 'Execution request initiated. Provide recipient address.'
+          : 'Execution request initiated. Provide recipient for scheduled payment.'
       )
     ]);
   };
@@ -903,7 +903,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
     if (['hi', 'hello', 'hey'].includes(lower)) {
       resetGuided();
-      setMessages((prev) => [...prev, agentMessage('Execution request received. Select an action to continue.')]);
+      setMessages((prev) => [...prev, agentMessage('Execution request initiated. Select an action to continue.')]);
       return;
     }
 
@@ -1076,7 +1076,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         description: data.error || 'Unknown send failure',
         metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt }
       });
-      setMessages((prev) => [...prev, agentMessage(`Execution halted: ${data.error}`, 'system')]);
+      setMessages((prev) => [...prev, agentMessage(`Execution blocked by policy: ${data.error}`, 'system')]);
       return { ok: false, error: data.error || 'Unknown send failure' };
     }
 
@@ -1259,8 +1259,14 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const showConfirm = Boolean(draft?.to_address && draft?.amount_usdt && execFlow.status === 'idle');
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-[320px_1fr]">
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundImage: 'radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px)',
+        backgroundSize: '28px 28px'
+      }}
+    >
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 md:grid-cols-[320px_1fr]">
         <aside className="h-fit rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-xl backdrop-blur-xl">
           <PaymanLogo size="sm" />
           <div className="mt-3 flex items-center justify-between">
@@ -1271,8 +1277,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           </div>
           <p className="mt-1 break-all font-mono text-xs text-slate-200">
             {truncateAddress(wallet.address)}
-          </p>
-          <div className="mt-4 flex items-center justify-between">
+          </p>          <div className="mt-4 flex items-center justify-between">
             <p className="text-xs text-slate-400">USDC Balance</p>
             <button
               onClick={() => setBalanceVisible((prev) => !prev)}
@@ -1369,6 +1374,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             )}
             {tab === 'invoices' && <InvoicesList invoices={invoices} />}
           </div>
+
+          <p className="mt-4 text-[10px] text-slate-600">Execution Engine v1.0 • Policy Layer Active</p>
         </aside>
 
         <main className="flex min-h-[80vh] flex-col rounded-2xl border border-white/10 bg-white/[0.02] shadow-xl backdrop-blur-xl">

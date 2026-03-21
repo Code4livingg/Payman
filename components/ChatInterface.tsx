@@ -31,7 +31,7 @@ import type {
 
 const PROMPTS = [
   'Send 20 USDC to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e for design work',
-  'Pay my developer 100 USDC every Friday',
+  'Schedule 100 USDC to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e every Friday',
   'Create invoice for 500 USDC for logo design',
   'How much have I spent this week?'
 ];
@@ -283,7 +283,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
               description: `Auto-deposited ${depositAmount.toFixed(2)} USDC to Aave yield vault`,
               metadata: { amount_usdt: depositAmount, tx_hash: data.txHash || '' }
             });
-            setMessages((prev) => [...prev, agentMessage(`Auto-deposited ${depositAmount.toFixed(2)} USDC to Aave yield vault.`, 'system')]);
+            setMessages((prev) => [...prev, agentMessage(`Auto-deposit: ${depositAmount.toFixed(2)} USDC → Aave yield vault`, 'system')]);
             await fetchWallet();
           }
         } catch { /* non-blocking */ }
@@ -591,7 +591,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           description: `BLOCKED: ${reason}`,
           metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: 'wdk' }
         });
-        setMessages((prev) => [...prev, agentMessage(`Execution blocked by policy: ${reason}`, 'system')]);
+        setMessages((prev) => [...prev, agentMessage(`Execution blocked by policy\nTransaction rejected by policy engine. ${reason}`, 'system')]);
 
         return;
       }
@@ -647,7 +647,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         recipient: currentDraft.to_address,
         memo: currentDraft.memo || ''
       });
-      setMessages((prev) => [...prev, agentMessage(`Execution error: ${reason}`, 'system')]);
+      setMessages((prev) => [...prev, agentMessage(`Execution blocked by policy\nTransaction rejected by policy engine. ${reason}`, 'system')]);
     } finally {
       setSending(false);
     }
@@ -677,19 +677,17 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         memo
       };
       setDraft(execDraft);
-      setMessages((prev) => [...prev, agentMessage('Execution request initiated.', 'system')]);
       await executeDraftThroughPipeline(execDraft);
       return;
     }
 
     // Detect send intent but missing data
     if (isSendIntent && (!parsedAddress || parsedAmount <= 0)) {
-      setMessages((prev) => [...prev, agentMessage('Invalid transaction format. Provide: amount, token, and recipient address.', 'system')]);
+      setMessages((prev) => [...prev, agentMessage('Invalid transaction format', 'system')]);
       return;
     }
 
     if (['hi', 'hello', 'hey'].includes(lower)) {
-      setMessages((prev) => [...prev, agentMessage('Execution request initiated. Select an action to continue.')]);
       return;
     }
 
@@ -718,7 +716,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
       if (parsed.type === 'cancel') {
         setDraft(null);
-        setMessages((prev) => [...prev, agentMessage('Execution cancelled.', 'system')]);
         setTyping(false);
         return;
       }
@@ -726,7 +723,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       // If agent returns a complete send draft, execute immediately
       if ((parsed.type === 'send' || parsed.type === 'update_draft') && parsed.draft?.to_address && parsed.draft?.amount_usdt) {
         setDraft(parsed.draft);
-        setMessages((prev) => [...prev, agentMessage('Execution request initiated.', 'system')]);
         setTyping(false);
         await executeDraftThroughPipeline(parsed.draft);
         return;
@@ -759,7 +755,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             description: `${schedule.label}: ${schedule.amount_usdt} USDC ${schedule.frequency}`,
             metadata: { schedule_id: schedule.id }
           });
-          setMessages((prev) => [...prev, agentMessage(`Schedule created: ${schedule.amount_usdt} USDC ${schedule.frequency} to ${toAddress.slice(0, 6)}...${toAddress.slice(-4)}.`, 'system')]);
+          setMessages((prev) => [...prev, agentMessage(`Schedule registered: ${schedule.amount_usdt} USDC ${schedule.frequency} → ${toAddress.slice(0, 6)}...${toAddress.slice(-4)}`, 'system')]);
   
           setTyping(false);
           return;
@@ -775,7 +771,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
               description: `${target.label} paused`,
               metadata: { schedule_id: target.id }
             });
-            setMessages((prev) => [...prev, agentMessage(`Schedule paused: ${target.label}.`, 'system')]);
+            setMessages((prev) => [...prev, agentMessage(`Schedule paused: ${target.label}`, 'system')]);
             setTyping(false);
             return;
           }
@@ -805,7 +801,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             description: `${invoice.id} for ${invoice.amount_usdt} USDC`,
             metadata: { invoice_id: invoice.id }
           });
-          setMessages((prev) => [...prev, agentMessage(`Invoice ${invoice.id} created for ${invoice.amount_usdt} USDC.`, 'system')]);
+          setMessages((prev) => [...prev, agentMessage(`Invoice ${invoice.id} created — ${invoice.amount_usdt} USDC — ${invoice.description}`, 'system')]);
   
           setTyping(false);
           return;
@@ -813,23 +809,22 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       }
 
       if (parsed.type === 'query' && /spent/i.test(lower)) {
-        setMessages((prev) => [...prev, agentMessage(`Spending summary: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)]);
-
+        setMessages((prev) => [...prev, agentMessage(`${spentThisWeek.toFixed(2)} USDC spent in the last 7 days`, 'system')]);
         setTyping(false);
         return;
       }
 
-      // Fallback: show agent message only if it's not conversational filler
+      // Fallback: filter conversational filler
       const isFillerResponse = /i can help|please provide|what would you|let me know|sure|of course/i.test(parsed.message);
       if (!isFillerResponse && parsed.message) {
-        setMessages((prev) => [...prev, agentMessage(parsed.message)]);
+        setMessages((prev) => [...prev, agentMessage(parsed.message, 'system')]);
       } else {
-        setMessages((prev) => [...prev, agentMessage('Invalid transaction format. Provide: amount, token, and recipient address.', 'system')]);
+        setMessages((prev) => [...prev, agentMessage('Invalid transaction format', 'system')]);
       }
     } catch (error) {
       setMessages((prev) => [
         ...prev,
-        agentMessage(`Parser exception: ${error instanceof Error ? error.message : 'unknown error'}`, 'system')
+        agentMessage(`Execution error: ${error instanceof Error ? error.message : 'unknown'}`, 'system')
       ]);
     } finally {
       setTyping(false);
@@ -892,7 +887,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setMessages((prev) => [
       ...prev,
       agentMessage(
-        `Payment confirmed. ${currentDraft.amount_usdt} USDC sent successfully.`,
+        `Execution successful\nAll policy constraints satisfied before execution.`,
         'system',
         data.tx_hash
       )
@@ -997,7 +992,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       );
 
       if (changed) {
-        setMessages((prev) => [...prev, agentMessage('Invoice watcher updated invoice statuses.', 'system')]);
+        // Invoice status updated — reflected in sidebar, no chat message needed
       }
     }, 30_000);
 
@@ -1027,7 +1022,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         setMessages((prev) => [
           ...prev,
           agentMessage(
-            `Low balance warning: ${balance.toFixed(2)} USDC remaining, ${due24h.toFixed(2)} USDC due in scheduled payments tomorrow.`,
+            `Low balance: ${balance.toFixed(2)} USDC available — ${due24h.toFixed(2)} USDC due in 24h`,
             'system'
           )
         ]);
@@ -1180,14 +1175,14 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto p-4 md:p-6">
             {!messages.length && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="mb-3 text-sm text-slate-300">Try one of these prompts:</p>
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-600">Example commands</p>
                 <div className="grid gap-2 md:grid-cols-2">
                   {PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => onSendMessage(prompt)}
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left text-sm text-slate-200 transition hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.04)]"
+                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left font-mono text-xs text-slate-400 transition hover:border-[#00c896]/30 hover:bg-[rgba(0,200,150,0.03)] hover:text-slate-300"
                     >
                       {prompt}
                     </button>
@@ -1204,12 +1199,12 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             )}
 
             {typing && (
-              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-slate-300">
-                <span>Validating input...</span>
+              <div className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-slate-500">
+                <span className="font-mono text-[11px] uppercase tracking-[0.14em]">Evaluating</span>
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.2s]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.1s]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-600 [animation-delay:-0.2s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-600 [animation-delay:-0.1s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-600" />
                 </span>
               </div>
             )}
@@ -1238,7 +1233,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') onSendMessage();
                 }}
-                placeholder="Ask Payman to send, schedule, invoice, or query spending..."
+                placeholder="Enter execution command — e.g. Send 20 USDC to 0x..."
                 className="w-full rounded-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[#00c896] focus:shadow-[0_0_0_3px_rgba(0,200,150,0.10)]"
               />
               <button

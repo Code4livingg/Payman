@@ -14,8 +14,9 @@ export function PaymentExplanationCard({ explanation }: { explanation: PaymentEx
 
   return (
     <div className="flex w-full justify-start">
-      <div className="animate-fade-up rounded-2xl border border-emerald-400/30 bg-slate-900/90 p-4 shadow-lg shadow-emerald-900/20 md:max-w-[75%]">
-        <h3 className="text-sm font-semibold text-slate-100">Why this payment was executed</h3>
+      <div className="animate-fade-up rounded-2xl border border-emerald-400/20 bg-slate-900/80 p-4 shadow-lg shadow-emerald-900/10 md:max-w-[75%]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-600">Decision computed before execution.</p>
+        <h3 className="mt-1 text-sm font-semibold text-slate-100">Policy evaluation result</h3>
 
         <div className="mt-4 grid gap-4 text-sm">
           <div>

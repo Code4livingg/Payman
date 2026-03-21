@@ -10,8 +10,13 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const text = message.content.toLowerCase();
-  const isFailure = isSystem && /(failed|error|blocked|rejected|declined|overdue)/i.test(text);
-  const isProcessing = isSystem && /(processing|authorizing|pending|thinking)/i.test(text);
+  const isFailure = isSystem && /(blocked|error|invalid|failed|rejected)/i.test(text);
+  const isProcessing = isSystem && /(processing|authorizing|pending|evaluating)/i.test(text);
+
+  // Split "Primary\nSecondary" format for system messages
+  const [primaryLine, secondaryLine] = message.content.includes('\n')
+    ? message.content.split('\n')
+    : [message.content, null];
 
   return (
     <div className={cn('flex w-full', isUser ? 'justify-end' : 'justify-start')}>
@@ -26,7 +31,10 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           isProcessing && 'border-amber-500/30 bg-amber-500/10 text-amber-100'
         )}
       >
-        <p>{message.content}</p>
+        <p className="font-medium">{primaryLine}</p>
+        {secondaryLine && (
+          <p className="mt-1 text-[11px] opacity-60">{secondaryLine}</p>
+        )}
 
         {message.txHash && (
           <div className="mt-3 flex items-center gap-2">

@@ -130,7 +130,6 @@ export interface WalletSendResult {
   from_address?: string;
   usdt_balance?: string;
   error?: string;
-  fallback?: boolean;
 }
 
 export type TriggerType = 'manual_command' | 'schedule' | 'github_event';

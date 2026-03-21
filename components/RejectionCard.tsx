@@ -20,11 +20,11 @@ interface RejectionCardProps {
 
 const CONTENT: Record<RejectionReason, { rule: (attempted: number, limit: number | string) => string; fix: string }> = {
   amount_exceeded: {
-    rule: (attempted, limit) => `Amount ${attempted} USDT exceeds single limit of ${limit} USDT`,
+    rule: (attempted, limit) => `Amount ${attempted} USDC exceeds single limit of ${limit} USDC`,
     fix: 'Reduce the amount to fit the single-payment limit or raise the limit in Settings.'
   },
   daily_cap_reached: {
-    rule: (attempted, limit) => `Daily cap of ${limit} USDT reached. ${attempted} USDT spent today`,
+    rule: (attempted, limit) => `Daily cap of ${limit} USDC reached. ${attempted} USDC spent today`,
     fix: 'Wait for the daily window to reset or increase the daily cap in Settings.'
   },
   whitelist_violation: {
@@ -70,8 +70,8 @@ export function RejectionCard({
         </div>
 
         <div className="space-y-2 text-slate-300">
-          <p>Attempted: {attempted} USDT</p>
-          <p>Limit: {typeof limit === 'number' ? `${limit} USDT` : limit}</p>
+          <p>Attempted: {attempted} USDC</p>
+          <p>Limit: {typeof limit === 'number' ? `${limit} USDC` : limit}</p>
         </div>
 
         <div>

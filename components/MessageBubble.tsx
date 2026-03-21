@@ -13,8 +13,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       <div
         className={cn(
           'max-w-[85%] rounded-2xl border px-4 py-3 text-sm leading-relaxed shadow-sm md:max-w-[70%]',
-          isUser && 'rounded-[18px_18px_4px_18px] border-[rgba(0,200,150,0.2)] bg-[rgba(0,200,150,0.15)] text-white',
-          !isUser && !isSystem && 'rounded-[18px_18px_18px_4px] border-white/10 bg-white/[0.04] text-white',
+          isUser && 'rounded-[18px_18px_4px_18px] text-white',
+          isUser && '[background:linear-gradient(135deg,rgba(0,200,150,0.15),rgba(124,58,237,0.10))] [border:1px_solid_rgba(0,200,150,0.25)]',
+          !isUser && !isSystem && 'rounded-[18px_18px_18px_4px] text-white [background:rgba(255,255,255,0.04)] [border:1px_solid_rgba(255,255,255,0.08)]',
           isSystem && !isFailure && !isProcessing && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
           isFailure && 'border-red-500/30 bg-red-500/10 text-red-100',
           isProcessing && 'border-amber-500/30 bg-amber-500/10 text-amber-100'

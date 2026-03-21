@@ -45,7 +45,7 @@ export default function TransactionsPage() {
               </span>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-300">
-              <span>{tx.amount_usdt.toFixed(2)} USDT</span>
+              <span>{tx.amount_usdt.toFixed(2)} USDC</span>
               <span>{formatDate(tx.timestamp)}</span>
             </div>
             {tx.failure_reason ? <p className="mt-2 text-xs text-red-300">Failure reason: {tx.failure_reason}</p> : null}

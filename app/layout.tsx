@@ -1,16 +1,18 @@
 import type { Metadata } from 'next';
+import { WalletProvider } from '@/context/WalletContext';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Payman',
-  description: 'Autonomous USDT payment agent built on Tether WDK'
+  description: 'Autonomous USDC payment agent built on Tether WDK'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>
-        <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999 }}>
+        <WalletProvider>
+          <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999 }}>
           <div
             style={{
               position: 'absolute',
@@ -161,6 +163,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </div>
         {children}
+        </WalletProvider>
       </body>
     </html>
   );

@@ -20,14 +20,12 @@ export function TransactionHistoryPanel({ transactions }: { transactions: Transa
           {transactions.slice(0, 8).map((tx) => (
             <div key={tx.id} className="rounded-md border border-slate-800 bg-slate-950/60 p-2 text-xs">
               <div className="flex items-center justify-between">
-                <p className="font-medium text-slate-200">{tx.amount.toFixed(2)} USDT</p>
+                <p className="font-medium text-slate-200">{tx.amount.toFixed(2)} USDC</p>
                 <span
                   className={`rounded-full px-2 py-0.5 ${
                     tx.status === 'success'
                       ? 'bg-emerald-500/20 text-emerald-300'
-                      : tx.status === 'demo'
-                        ? 'bg-amber-500/20 text-amber-300'
-                        : 'bg-red-500/20 text-red-300'
+                      : 'bg-red-500/20 text-red-300'
                   }`}
                 >
                   {tx.status}

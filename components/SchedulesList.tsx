@@ -23,7 +23,7 @@ export function SchedulesList({ schedules, onTogglePause, onDelete }: Props) {
             </span>
           </div>
           <p className="mt-2 text-slate-300">
-            {schedule.amount_usdt} USDT to <span className="font-mono">{schedule.to_address}</span>
+            {schedule.amount_usdt} USDC to <span className="font-mono">{schedule.to_address}</span>
           </p>
           <p className="text-xs text-slate-400">Next run: {formatDate(schedule.next_run)}</p>
           <div className="mt-3 flex gap-2">

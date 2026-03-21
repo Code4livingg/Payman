@@ -16,15 +16,7 @@ import { PaymanLogo } from './PaymanLogo';
 import { SchedulesList } from './SchedulesList';
 import { TransactionHistoryPanel } from './TransactionHistoryPanel';
 import { generateExplanation } from '@/lib/explainer';
-import {
-  connectMetaMask,
-  getMetaMaskUsdtBalance,
-  hasMetaMaskProvider,
-  isMetaMaskUserRejected,
-  sendUsdtWithMetaMask,
-  truncateAddress,
-  type WalletMode
-} from '@/lib/metamask';
+import { truncateAddress } from '@/lib/metamask';
 import { evaluatePaymentValidation } from '@/lib/policy';
 import { storage } from '@/lib/storage';
 import type {
@@ -43,9 +35,9 @@ import type {
 import { computeNextRun, generateId } from '@/lib/utils';
 
 const PROMPTS = [
-  'Send 20 USDT to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e for design work',
-  'Pay my developer 100 USDT every Friday',
-  'Create invoice for 500 USDT for logo design',
+  'Send 20 USDC to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e for design work',
+  'Pay my developer 100 USDC every Friday',
+  'Create invoice for 500 USDC for logo design',
   'How much have I spent this week?'
 ];
 type GuidedFlow = 'menu' | 'send' | 'schedule';
@@ -54,7 +46,6 @@ interface WalletState {
   address: string;
   usdt_balance: string;
   network: string;
-  demo: boolean;
   label: string;
 }
 
@@ -109,12 +100,13 @@ function agentMessage(content: string, role: 'agent' | 'system' = 'agent'): Chat
 }
 
 function parseAmount(text: string): number {
-  const match = text.match(/(\d+(?:\.\d+)?)\s*usdt?/i);
+  const match = text.match(/(\d+(?:\.\d+)?)\s*usd[ct]?/i);
   return match ? Number(match[1]) : 0;
 }
 
 function parseAddress(text: string): string {
-  return text.match(/0x[a-fA-F0-9]{40}/)?.[0] || '';
+  const match = text.match(/(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/);
+  return match ? match[0].trim().toLowerCase() : '';
 }
 
 function parseScheduleFrequency(text: string): 'daily' | 'weekly' | 'monthly' {
@@ -148,13 +140,12 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tab, setTab] = useState<TabType>('activity');
-  const [walletMode, setWalletMode] = useState<WalletMode>('demo');
+  const walletMode = 'wdk' as const;
   const [wallet, setWallet] = useState<WalletState>({
     address: 'Loading...',
     usdt_balance: '0.00',
     network: 'Sepolia',
-    demo: true,
-    label: 'Demo Wallet'
+    label: 'WDK Wallet'
   });
   const [feeEth, setFeeEth] = useState<string>('');
   const [input, setInput] = useState('');
@@ -206,7 +197,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       setActivity(storage.getActivity());
       setSchedules(storage.getSchedules());
       setInvoices(storage.getInvoices());
-      setWalletMode(storage.getWalletMode());
     } catch (error) {
       console.error('Failed to hydrate Payman state', error);
     } finally {
@@ -257,10 +247,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     storage.setInvoices(invoices);
   }, [invoices, hydrated]);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    storage.setWalletMode(walletMode);
-  }, [walletMode, hydrated]);
 
   // Load Aave state from localStorage and fetch balance
   useEffect(() => {
@@ -280,7 +266,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         const yieldData = await yieldRes.json() as { success: boolean; yield?: number };
         if (balData.success && balData.aaveBalance !== undefined) setAaveBalance(balData.aaveBalance);
         if (yieldData.success && yieldData.yield !== undefined) setAaveYield(yieldData.yield);
-      } catch { /* use demo defaults */ }
+      } catch { /* use Aave defaults */ }
     };
 
     void fetchAaveData();
@@ -311,10 +297,10 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             addActivity({
               type: 'aave_deposit',
               title: 'Auto-deposited to Aave',
-              description: `Auto-deposited ${depositAmount.toFixed(2)} USDT to Aave yield vault`,
+              description: `Auto-deposited ${depositAmount.toFixed(2)} USDC to Aave yield vault`,
               metadata: { amount_usdt: depositAmount, tx_hash: data.txHash || '' }
             });
-            setMessages((prev) => [...prev, agentMessage(`Auto-deposited ${depositAmount.toFixed(2)} USDT to Aave yield vault.`, 'system')]);
+            setMessages((prev) => [...prev, agentMessage(`Auto-deposited ${depositAmount.toFixed(2)} USDC to Aave yield vault.`, 'system')]);
             await fetchWallet();
           }
         } catch { /* non-blocking */ }
@@ -360,7 +346,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         addActivity({
           type: 'aave_deposit',
           title: 'Deposited to Aave',
-          description: `Deposited ${amount.toFixed(2)} USDT to Aave yield vault`,
+          description: `Deposited ${amount.toFixed(2)} USDC to Aave yield vault`,
           metadata: { amount_usdt: amount, tx_hash: data.txHash || '' }
         });
         await fetchWallet();
@@ -384,7 +370,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         addActivity({
           type: 'aave_withdraw',
           title: 'Withdrew from Aave',
-          description: `Withdrew ${amount.toFixed(2)} USDT from Aave yield vault`,
+          description: `Withdrew ${amount.toFixed(2)} USDC from Aave yield vault`,
           metadata: { amount_usdt: amount, tx_hash: data.txHash || '' }
         });
         await fetchWallet();
@@ -445,7 +431,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     if (/^0x[a-fA-F0-9]{40}$/.test(wallet.address)) return wallet.address;
     const stored = storage.getWalletAddress();
     if (/^0x[a-fA-F0-9]{40}$/.test(stored)) return stored;
-    return 'demo_user';
+    return 'wdk_user';
   };
 
   const syncUserIdentity = async (address: string) => {
@@ -503,7 +489,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     amount: number;
     memo?: string;
     txHash: string;
-    status: 'success' | 'failed' | 'demo';
+    status: 'success' | 'failed';
   }) => {
     try {
       await fetch('/api/transactions', {
@@ -533,59 +519,25 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       const response = await fetch('/api/wallet');
       const data = await response.json();
       if (data.ok) {
-        const walletId = /^0x[a-fA-F0-9]{40}$/.test(data.address) ? data.address : 'demo_user';
+        const walletId = /^0x[a-fA-F0-9]{40}$/.test(data.address) ? data.address : 'wdk_user';
         storage.setWalletAddress(walletId);
         setWallet({
           address: data.address,
           usdt_balance: data.usdt_balance,
           network: data.network,
-          demo: true,
-          label: 'Demo Wallet'
+          label: 'WDK Wallet'
         });
         await syncUserIdentity(walletId);
         await fetchPolicyFromApi(walletId);
         await fetchProductData(walletId);
       }
     } catch {
-      setWallet((prev) => ({ ...prev, address: 'Demo Wallet', demo: true, label: 'Demo Wallet' }));
-    }
-  };
-
-  const refreshMetaMaskWallet = async () => {
-    try {
-      const connected = await connectMetaMask();
-      const balance = await getMetaMaskUsdtBalance(connected.address);
-      storage.setWalletAddress(connected.address);
-      setWallet({
-        address: connected.address,
-        usdt_balance: balance,
-        network: 'Sepolia',
-        demo: false,
-        label: 'Connected: MetaMask'
-      });
-      setWalletMode('metamask');
-      await syncUserIdentity(connected.address);
-      await fetchPolicyFromApi(connected.address);
-      await fetchProductData(connected.address);
-    } catch (error) {
-      console.warn('MetaMask failed, falling back', error);
-      setWalletMode('demo');
-      await fetchWallet();
+      setWallet((prev) => ({ ...prev, label: 'WDK Wallet' }));
     }
   };
 
   useEffect(() => {
-    const initWallet = async () => {
-      const hasMetaMask = typeof window !== 'undefined' && (window as Window & { ethereum?: unknown }).ethereum;
-      if (hasMetaMaskProvider() && hasMetaMask) {
-        await refreshMetaMaskWallet();
-      } else {
-        setWalletMode('demo');
-        await fetchWallet();
-      }
-    };
-
-    void initWallet();
+    void fetchWallet();
   }, []);
 
   useEffect(() => {
@@ -638,7 +590,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       if (currentDraft.amount_usdt > liquidBalance && aaveBalance > 0) {
         const needed = Number((currentDraft.amount_usdt - liquidBalance + 10).toFixed(2));
         const withdrawAmt = Math.min(needed, aaveBalance);
-        setMessages((prev) => [...prev, agentMessage(`Withdrawing ${withdrawAmt.toFixed(2)} USDT from Aave yield vault to cover payment...`, 'system')]);
+        setMessages((prev) => [...prev, agentMessage(`Withdrawing ${withdrawAmt.toFixed(2)} USDC from Aave yield vault to cover payment...`, 'system')]);
         try {
           const res = await fetch('/api/aave', {
             method: 'POST',
@@ -651,7 +603,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             addActivity({
               type: 'aave_withdraw',
               title: 'Withdrew from Aave for payment',
-              description: `Withdrew ${withdrawAmt.toFixed(2)} USDT from Aave to cover payment`,
+              description: `Withdrew ${withdrawAmt.toFixed(2)} USDC from Aave to cover payment`,
               metadata: { amount_usdt: withdrawAmt, tx_hash: data.txHash || '' }
             });
             await fetchWallet();
@@ -696,7 +648,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           type: 'payment_blocked',
           title: 'Payment blocked',
           description: `BLOCKED: ${reason}`,
-          metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: walletMode }
+          metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: 'wdk' }
         });
         setMessages((prev) => [...prev, agentMessage(`Execution halted: BLOCKED: ${reason}`, 'system')]);
         showFlowCompleteChoice();
@@ -752,85 +704,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     }));
 
     try {
-      if (walletMode === 'metamask') {
-        try {
-          const tx = await sendUsdtWithMetaMask(draft.to_address, draft.amount_usdt);
-          const validationResults = evaluatePaymentValidation(draft, policy, activity);
-          const explanation = generateExplanation({
-            triggerType: 'manual_command',
-            policy,
-            draft,
-            validationResults
-          });
-
-          addActivity({
-            type: 'payment_sent',
-            title: 'USDT payment sent',
-            description: `${draft.amount_usdt} USDT sent to ${draft.to_address}`,
-            metadata: {
-              to_address: draft.to_address,
-              amount_usdt: draft.amount_usdt,
-              tx_hash: tx.txHash,
-              memo: draft.memo || '',
-              fallback: false,
-              wallet_mode: 'metamask'
-            }
-          });
-          addLocalTransaction({
-            recipient: 'Manual payment',
-            to_address: draft.to_address,
-            amount_usdt: draft.amount_usdt,
-            status: 'success',
-            tx_hash: tx.txHash
-          });
-          await persistTransaction({
-            toAddress: draft.to_address,
-            amount: draft.amount_usdt,
-            memo: draft.memo,
-            txHash: tx.txHash,
-            status: 'success'
-          });
-          await wait(1500);
-          setExecFlow((prev) => ({ ...prev, currentStep: 6 }));
-          setMessages((prev) => [
-            ...prev,
-            agentMessage(`Transaction submitted via MetaMask. Tx: ${tx.txHash}\nExplorer: ${tx.explorerUrl}`, 'system')
-          ]);
-          setPaymentExplanations((prev) => [...prev, { id: generateId('exp'), explanation }]);
-          setDraft(null);
-          setExecFlow((prev) => ({
-            ...prev,
-            status: 'complete',
-            currentStep: 6,
-            txHash: tx.txHash
-          }));
-          await refreshMetaMaskWallet();
-          showFlowCompleteChoice();
-          return;
-        } catch (error) {
-          if (isMetaMaskUserRejected(error)) {
-            addLocalTransaction({
-              recipient: 'Manual payment',
-              to_address: draft.to_address,
-              amount_usdt: draft.amount_usdt,
-              status: 'failed',
-              failure_reason: 'User rejected wallet confirmation'
-            });
-            setExecFlow((prev) => ({
-              ...prev,
-              status: 'blocked',
-              currentStep: 5,
-              rejectionReason: 'User rejected wallet confirmation'
-            }));
-            setMessages((prev) => [...prev, agentMessage('Execution cancelled: MetaMask authorization rejected.', 'system')]);
-            showFlowCompleteChoice();
-            return;
-          }
-
-          console.warn('MetaMask failed, falling back', error);
-          setWalletMode('demo');
-        }
-      }
+      console.log('Executing via WDK only — no fallback enabled');
 
       const sendResult = await executeApiPayment(draft);
       if (sendResult.ok) {
@@ -895,21 +769,25 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
     if (guidedFlow === 'send') {
       if (guidedStep === 1) {
-        setGuidedRecipient(text);
+        // Extract address if user pasted a full sentence, otherwise use raw input
+        const extracted = text.match(/(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/);
+        const cleanRecipient = extracted ? extracted[0].trim().toLowerCase() : text.trim().replace(/[\r\n\t]/g, '').toLowerCase();
+        console.log('Parsed address (guided):', cleanRecipient);
+        setGuidedRecipient(cleanRecipient);
         setGuidedStep(2);
-        setMessages((prev) => [...prev, agentMessage('Validating input... Provide USDT amount.')]);
+        setMessages((prev) => [...prev, agentMessage('Validating input... Provide USDC amount.')]);
         return true;
       }
 
       if (guidedStep === 2) {
         const amount = Number(text);
         if (!Number.isFinite(amount) || amount <= 0) {
-          setMessages((prev) => [...prev, agentMessage('Validation failed. Enter a valid USDT amount (for example: 20).', 'system')]);
+          setMessages((prev) => [...prev, agentMessage('Validation failed. Enter a valid USDC amount (for example: 20).', 'system')]);
           return true;
         }
         setGuidedAmount(amount);
         setGuidedStep(3);
-        setMessages((prev) => [...prev, agentMessage(`Authorization checkpoint: send ${amount} USDT to ${guidedRecipient}. Type "yes" to confirm.`)]);
+        setMessages((prev) => [...prev, agentMessage(`Authorization checkpoint: send ${amount} USDC to ${guidedRecipient}. Type "yes" to confirm.`)]);
         return true;
       }
 
@@ -936,16 +814,19 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
     if (guidedFlow === 'schedule') {
       if (guidedStep === 1) {
-        setGuidedRecipient(text);
+        const extracted = text.match(/(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/);
+        const cleanRecipient = extracted ? extracted[0].trim().toLowerCase() : text.trim().replace(/[\r\n\t]/g, '').toLowerCase();
+        console.log('Parsed address (guided schedule):', cleanRecipient);
+        setGuidedRecipient(cleanRecipient);
         setGuidedStep(2);
-        setMessages((prev) => [...prev, agentMessage('Validating input... Provide scheduled USDT amount.')]);
+        setMessages((prev) => [...prev, agentMessage('Validating input... Provide scheduled USDC amount.')]);
         return true;
       }
 
       if (guidedStep === 2) {
         const amount = Number(text);
         if (!Number.isFinite(amount) || amount <= 0) {
-          setMessages((prev) => [...prev, agentMessage('Validation failed. Enter a valid USDT amount (for example: 100).', 'system')]);
+          setMessages((prev) => [...prev, agentMessage('Validation failed. Enter a valid USDC amount (for example: 100).', 'system')]);
           return true;
         }
         setGuidedAmount(amount);
@@ -959,7 +840,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         setGuidedStep(4);
         setMessages((prev) => [
           ...prev,
-          agentMessage(`Authorization checkpoint: schedule ${guidedAmount} USDT to ${guidedRecipient} for "${text}". Type "yes" to confirm.`)
+          agentMessage(`Authorization checkpoint: schedule ${guidedAmount} USDC to ${guidedRecipient} for "${text}". Type "yes" to confirm.`)
         ]);
         return true;
       }
@@ -989,7 +870,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         addActivity({
           type: 'schedule_executed',
           title: 'Schedule created',
-          description: `${guidedAmount} USDT to ${guidedRecipient} (${guidedWhen})`,
+          description: `${guidedAmount} USDC to ${guidedRecipient} (${guidedWhen})`,
           metadata: { schedule_id: schedule.id }
         });
         setMessages((prev) => [
@@ -1044,7 +925,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
     if (lower === 'check spending') {
       setTab('activity');
-      setMessages((prev) => [...prev, agentMessage(`Spending summary generated: ${spentThisWeek.toFixed(2)} USDT in the last 7 days.`)]);
+      setMessages((prev) => [...prev, agentMessage(`Spending summary generated: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)]);
       return;
     }
 
@@ -1091,7 +972,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           addActivity({
             type: 'schedule_executed',
             title: 'Schedule created',
-            description: `${schedule.label}: ${schedule.amount_usdt} USDT ${schedule.frequency}`,
+            description: `${schedule.label}: ${schedule.amount_usdt} USDC ${schedule.frequency}`,
             metadata: { schedule_id: schedule.id }
           });
         }
@@ -1131,7 +1012,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           addActivity({
             type: 'invoice_generated',
             title: 'Invoice generated',
-            description: `${invoice.id} for ${invoice.amount_usdt} USDT`,
+            description: `${invoice.id} for ${invoice.amount_usdt} USDC`,
             metadata: { invoice_id: invoice.id }
           });
           setMessages((prev) => [
@@ -1147,7 +1028,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       if (parsed.type === 'query' && /spent/i.test(text.toLowerCase())) {
         setMessages((prev) => [
           ...prev,
-          agentMessage(`Spending summary generated: ${spentThisWeek.toFixed(2)} USDT in the last 7 days.`)
+          agentMessage(`Spending summary generated: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)
         ]);
         showFlowCompleteChoice();
         setTyping(false);
@@ -1201,15 +1082,14 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
     addActivity({
       type: 'payment_sent',
-      title: 'USDT payment sent',
-      description: `${currentDraft.amount_usdt} USDT sent to ${currentDraft.to_address}`,
+      title: 'USDC payment sent',
+      description: `${currentDraft.amount_usdt} USDC sent to ${currentDraft.to_address}`,
       metadata: {
         to_address: currentDraft.to_address,
         amount_usdt: currentDraft.amount_usdt,
         tx_hash: data.tx_hash,
         memo: currentDraft.memo || '',
-        fallback: data.fallback || false,
-        wallet_mode: 'demo'
+        wallet_mode: 'wdk'
       }
     });
     addLocalTransaction({
@@ -1222,7 +1102,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setMessages((prev) => [
       ...prev,
       agentMessage(
-        `Transaction submitted. Tx: ${data.tx_hash}\nExplorer: ${data.explorer_url}${data.fallback ? '\nDemo fallback mode was used.' : ''}`,
+        `Transaction submitted. Tx: ${data.tx_hash}\nExplorer: ${data.explorer_url}`,
         'system'
       )
     ]);
@@ -1354,14 +1234,14 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         addActivity({
           type: 'low_balance_warning',
           title: 'Low balance warning',
-          description: `${balance.toFixed(2)} USDT remaining, ${due24h.toFixed(2)} USDT due in next 24h`,
+          description: `${balance.toFixed(2)} USDC remaining, ${due24h.toFixed(2)} USDC due in next 24h`,
           metadata: { balance, due_24h: due24h }
         });
 
         setMessages((prev) => [
           ...prev,
           agentMessage(
-            `Low balance warning: ${balance.toFixed(2)} USDT remaining, ${due24h.toFixed(2)} USDT due in scheduled payments tomorrow.`,
+            `Low balance warning: ${balance.toFixed(2)} USDC remaining, ${due24h.toFixed(2)} USDC due in scheduled payments tomorrow.`,
             'system'
           )
         ]);
@@ -1383,22 +1263,16 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         <aside className="h-fit rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-xl backdrop-blur-xl">
           <PaymanLogo size="sm" />
           <div className="mt-3 flex items-center justify-between">
-            <p className="text-xs text-slate-400">{walletMode === 'metamask' ? 'Connected: MetaMask' : 'Demo Wallet'}</p>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                walletMode === 'metamask'
-                  ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
-              }`}
-            >
-              {walletMode === 'metamask' ? 'MetaMask Connected' : 'Demo Mode'}
+            <p className="text-xs text-slate-400">WDK Wallet • Sepolia</p>
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300 ring-1 ring-emerald-500/30">
+              Live
             </span>
           </div>
           <p className="mt-1 break-all font-mono text-xs text-slate-200">
-            {walletMode === 'metamask' ? truncateAddress(wallet.address) : wallet.address}
+            {truncateAddress(wallet.address)}
           </p>
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-xs text-slate-400">USDT Balance</p>
+            <p className="text-xs text-slate-400">USDC Balance</p>
             <button
               onClick={() => setBalanceVisible((prev) => !prev)}
               className="rounded-md border border-white/10 p-1 text-slate-300 hover:bg-white/[0.04]"
@@ -1410,7 +1284,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           <p className="text-3xl font-bold text-[#00c896] [text-shadow:0_0_22px_rgba(0,200,150,0.28)]">{balanceVisible ? wallet.usdt_balance : '****'}</p>
           <div className="mt-3 flex gap-2">
             <button
-              onClick={walletMode === 'metamask' ? refreshMetaMaskWallet : fetchWallet}
+              onClick={fetchWallet}
               className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 hover:bg-white/[0.04]"
             >
               <RefreshCcw className="h-3 w-3" /> Refresh
@@ -1424,10 +1298,10 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           </div>
 
           {/* Aave Yield Vault Panel */}
-          <div className="mt-4 rounded-2xl border p-3.5" style={{ background: 'rgba(124,58,237,0.06)', borderColor: 'rgba(124,58,237,0.2)' }}>
+          <div className="mt-4 rounded-2xl border p-3.5" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(0,200,150,0.04))', borderColor: 'rgba(124,58,237,0.2)' }}>
             <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-violet-400">Aave Yield Vault</p>
-            <p className="mt-2 text-sm font-bold text-white">{aaveBalance.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDT deposited</span></p>
-            <p className="mt-0.5 text-xs text-emerald-400">+{aaveYield.toFixed(4)} USDT yield earned</p>
+            <p className="mt-2 text-sm font-bold text-white">{aaveBalance.toFixed(2)} <span className="text-xs font-normal text-slate-400">USDC deposited</span></p>
+            <p className="mt-0.5 text-xs text-emerald-400">+{aaveYield.toFixed(4)} USDC yield earned</p>
             <p className="mt-0.5 text-[11px] text-slate-500">APY: ~4.2%</p>
             <div className="mt-3 flex gap-2">
               <button
@@ -1602,12 +1476,12 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
                   if (event.key === 'Enter') onSendMessage();
                 }}
                 placeholder="Ask Payman to send, schedule, invoice, or query spending..."
-                className="w-full rounded-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[#00c896] focus:shadow-[0_0_0_3px_rgba(0,200,150,0.1)]"
+                className="w-full rounded-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[#00c896] focus:shadow-[0_0_0_3px_rgba(0,200,150,0.10)]"
               />
               <button
                 onClick={() => onSendMessage()}
                 disabled={!input.trim() || typing}
-                className="rounded-full bg-[#00c896] px-5 py-3 text-sm font-medium text-black transition hover:brightness-110 disabled:opacity-50"
+                className="rounded-full px-5 py-3 text-sm font-bold text-black transition hover:brightness-110 disabled:opacity-50 [background:linear-gradient(135deg,#00c896,#00a878)]"
               >
                 Send
               </button>

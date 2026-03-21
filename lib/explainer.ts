@@ -1,3 +1,4 @@
+import { isAddress } from 'ethers';
 import type { DraftPayment, PaymentExplanation, Policy, TriggerType, ValidationResult } from './types';
 
 interface ExplanationInput {
@@ -12,7 +13,7 @@ function inferChecksFromPayload(policy: Policy, draft: DraftPayment): Validation
     {
       key: 'valid_ethereum_address',
       label: 'Valid Ethereum address',
-      status: /^0x[a-fA-F0-9]{40}$/.test(draft.to_address) ? 'passed' : 'failed'
+      status: (() => { try { return isAddress((draft.to_address ?? '').toLowerCase()); } catch { return false; } })() ? 'passed' : 'failed'
     },
     {
       key: 'within_max_single',

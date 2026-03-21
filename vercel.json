@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "env": {
+    "ANTHROPIC_API_KEY": "@anthropic_api_key",
+    "WDK_SEED_PHRASE": "@wdk_seed_phrase",
+    "NEXT_PUBLIC_WALLET_ADDRESS": "@next_public_wallet_address",
+    "ETHEREUM_RPC_URL": "@ethereum_rpc_url",
+    "NEXT_PUBLIC_WDK_INDEXER_BASE_URL": "@next_public_wdk_indexer_base_url",
+    "WDK_INDEXER_API_KEY": "@wdk_indexer_api_key",
+    "GITHUB_WEBHOOK_SECRET": "@github_webhook_secret"
+  }
+}

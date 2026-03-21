@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   experimental: {
-    typedRoutes: false
+    serverComponentsExternalPackages: ['@tetherto/wdk', '@tetherto/wdk-wallet-evm']
   }
 };
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { ChatInterface } from '@/components/ChatInterface';
 
 export default function AppPage({ searchParams }: { searchParams?: { prefill?: string; session?: string } }) {

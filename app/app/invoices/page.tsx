@@ -64,7 +64,7 @@ export default function InvoicesPage() {
                 {invoice.status}
               </span>
             </div>
-            <p className="mt-2 text-sm text-slate-200">{invoice.amount_usdt.toFixed(2)} USDT</p>
+            <p className="mt-2 text-sm text-slate-200">{invoice.amount_usdt.toFixed(2)} USDC</p>
             <p className="text-xs text-slate-400">Due: {formatDate(invoice.due_date)}</p>
             <div className="mt-3">
               <Link href={`/invoice/${invoice.id}`} className="text-xs text-emerald-300 hover:text-emerald-200">

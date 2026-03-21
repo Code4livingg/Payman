@@ -143,10 +143,11 @@ export default function LandingPage() {
 
             <div>
               <div className="flex flex-wrap gap-3">
-                <Link href="/app">
-                  <button className="rounded-full bg-[#00c896] px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02] hover:brightness-110">
-                    Execute with Payman
-                  </button>
+                <Link
+                  href="/app"
+                  className="rounded-full bg-[#00c896] px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02] hover:brightness-110"
+                >
+                  Execute with Payman
                 </Link>
                 <Link href="/system" className="rounded-full border border-white/20 bg-transparent px-6 py-3 text-sm text-white transition hover:bg-white/5">
                   View System ↓
@@ -201,7 +202,7 @@ export default function LandingPage() {
               <path d="M 20 240 Q 60 200 40 160" fill="none" stroke="rgba(0,200,150,0.12)" strokeWidth="1.5" strokeDasharray="4 4" />
               <path d="M 440 440 L 460 460 L 440 480" fill="none" stroke="rgba(245,158,11,0.2)" strokeWidth="1.5" strokeLinecap="round" />
               <rect x="10" y="260" width="56" height="22" rx="11" fill="rgba(0,200,150,0.08)" stroke="rgba(0,200,150,0.2)" strokeWidth="1" />
-              <text x="38" y="275" fill="#00c896" fontSize="9" fontFamily="monospace" textAnchor="middle">USDT ✓</text>
+              <text x="38" y="275" fill="#00c896" fontSize="9" fontFamily="monospace" textAnchor="middle">USDC ✓</text>
               <rect x="434" y="340" width="52" height="22" rx="11" fill="rgba(124,58,237,0.08)" stroke="rgba(124,58,237,0.25)" strokeWidth="1" />
               <text x="460" y="355" fill="#a78bfa" fontSize="9" fontFamily="monospace" textAnchor="middle">WDK</text>
               <rect x="8" y="450" width="66" height="22" rx="11" fill="rgba(245,158,11,0.08)" stroke="rgba(245,158,11,0.25)" strokeWidth="1" />
@@ -353,15 +354,15 @@ export default function LandingPage() {
                         padding: 16
                       }}
                     >
-                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)' }}>USDT Balance</div>
+                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)' }}>USDC Balance</div>
                       <div style={{ marginTop: 6, fontSize: 22, fontWeight: 700, color: '#fff' }}>1,250.00</div>
                       <div style={{ marginTop: 8, fontSize: 8, color: '#22c55e' }}>● Sepolia Testnet</div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       {[
-                        { dot: '#22c55e', label: 'Payment sent', amount: '−50 USDT', amountColor: '#f87171' },
-                        { dot: '#38bdf8', label: 'Invoice paid', amount: '+200 USDT', amountColor: '#22c55e' },
-                        { dot: '#f59e0b', label: 'Schedule ran', amount: '−100 USDT', amountColor: '#f87171' }
+                        { dot: '#22c55e', label: 'Payment sent', amount: '−50 USDC', amountColor: '#f87171' },
+                        { dot: '#38bdf8', label: 'Invoice paid', amount: '+200 USDC', amountColor: '#22c55e' },
+                        { dot: '#f59e0b', label: 'Schedule ran', amount: '−100 USDC', amountColor: '#f87171' }
                       ].map((item) => (
                         <div
                           key={item.label}
@@ -469,7 +470,7 @@ export default function LandingPage() {
                         lineHeight: 1.5
                       }}
                     >
-                      "Send 20 USDT to vendor for API sprint"
+                      "Send 20 USDC to vendor for API sprint"
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                       {EXECUTION_STEPS.map((step, idx) => {

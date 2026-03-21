@@ -101,7 +101,7 @@ export default function SettingsPage() {
     [policy]
   );
 
-  const preview = `Max: ${policy.max_single_usdt} USDT | Cap: ${policy.daily_cap_usdt} USDT | Whitelist: ${
+  const preview = `Max: ${policy.max_single_usdt} USDC | Cap: ${policy.daily_cap_usdt} USDC | Whitelist: ${
     policy.whitelist_enabled ? 'ON' : 'OFF'
   }`;
 
@@ -337,7 +337,7 @@ export default function SettingsPage() {
           <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold text-white">Yield Strategy</h2>
-              <p className="mt-1 text-sm text-slate-500">Auto-deposit idle USDT to Aave V3 on Sepolia to earn yield.</p>
+              <p className="mt-1 text-sm text-slate-500">Auto-deposit idle USDC to Aave V3 on Sepolia to earn yield.</p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-400/10 px-3 py-2 font-mono text-xs text-violet-300">
               ~4.2% APY on Sepolia
@@ -347,7 +347,7 @@ export default function SettingsPage() {
           <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4">
             <div>
               <p className="text-sm text-slate-100">Auto-deposit idle funds to Aave</p>
-              <p className="mt-1 text-xs text-slate-500">Automatically deposit USDT above the threshold to earn yield.</p>
+              <p className="mt-1 text-xs text-slate-500">Automatically deposit USDC above the threshold to earn yield.</p>
             </div>
             <Toggle
               checked={autoAave}

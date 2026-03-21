@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       amount: number;
       memo?: string;
       txHash: string;
-      status: 'success' | 'failed' | 'demo';
+      status: 'success' | 'failed';
     };
 
     const transaction = await createTransaction({

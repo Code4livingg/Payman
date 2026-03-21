@@ -10,8 +10,8 @@ function fmt(value: number) {
 
 export function InsightsCards({ totalSpent, last7DaysSpend, transactionCount }: Props) {
   const cards = [
-    { label: 'Total Spent', value: `${fmt(totalSpent)} USDT` },
-    { label: 'Last 7 Days', value: `${fmt(last7DaysSpend)} USDT` },
+    { label: 'Total Spent', value: `${fmt(totalSpent)} USDC` },
+    { label: 'Last 7 Days', value: `${fmt(last7DaysSpend)} USDC` },
     { label: 'Transactions', value: String(transactionCount) }
   ];
 

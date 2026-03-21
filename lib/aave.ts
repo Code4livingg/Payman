@@ -1,9 +1,10 @@
-import { Contract, JsonRpcProvider, Wallet, formatUnits, parseUnits } from 'ethers';
+import { Contract, JsonRpcProvider, Wallet, formatUnits } from 'ethers';
 import { usdtToBaseUnits } from './utils';
+import { TOKEN_ADDRESS, TOKEN_DECIMALS } from './wdk';
 
 export const AAVE_POOL_SEPOLIA = '0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951';
-export const AUSDT_SEPOLIA = '0x88Da569aea43C7CE28E4e21e9a97E73d5f9EC72C';
-export const USDT_SEPOLIA = '0x7169D38820dfd117C3FA1f22a697dBA58d90BA06';
+// aUSDC on Sepolia (Aave interest-bearing USDC)
+export const AUSDC_SEPOLIA = '0x8Be59D90A7Dc679C5cE5a7963cD1082dAB499918';
 
 const AAVE_POOL_ABI = [
   'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
@@ -15,29 +16,16 @@ const ERC20_ABI = [
   'function approve(address spender, uint256 amount) returns (bool)'
 ];
 
-const DEMO_AAVE_BALANCE = 847.32;
-const DEMO_YIELD = 12.18;
-const DEMO_APY = 4.2;
-
-function mockTxHash(): string {
-  return `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-}
-
 function getEnv() {
-  return {
-    seed: process.env.WDK_SEED_PHRASE,
-    rpcUrl: process.env.ETHEREUM_RPC_URL
-  };
+  const seed = process.env.WDK_SEED_PHRASE?.trim();
+  const rpcUrl = process.env.ETHEREUM_RPC_URL?.trim();
+  if (!seed) throw new Error('WDK_SEED_PHRASE is not configured');
+  if (!rpcUrl) throw new Error('ETHEREUM_RPC_URL is not configured');
+  return { seed, rpcUrl };
 }
 
-function isDemoMode(): boolean {
+function getSigner() {
   const { seed, rpcUrl } = getEnv();
-  return !seed || !rpcUrl;
-}
-
-async function getSignerAndProvider() {
-  const { seed, rpcUrl } = getEnv();
-  if (!seed || !rpcUrl) throw new Error('Missing WDK_SEED_PHRASE or ETHEREUM_RPC_URL');
   const provider = new JsonRpcProvider(rpcUrl);
   const wallet = Wallet.fromPhrase(seed).connect(provider);
   return { wallet, provider };
@@ -65,75 +53,41 @@ export interface AaveYield {
 }
 
 export async function getAaveBalance(): Promise<AaveBalance> {
-  if (isDemoMode()) {
-    return { aaveBalance: DEMO_AAVE_BALANCE, isDemoMode: true };
-  }
-
-  try {
-    const { wallet, provider } = await getSignerAndProvider();
-    const aUsdt = new Contract(AUSDT_SEPOLIA, ERC20_ABI, provider);
-    const raw = await aUsdt.balanceOf(wallet.address) as bigint;
-    return { aaveBalance: Number(formatUnits(raw, 6)), isDemoMode: false };
-  } catch {
-    return { aaveBalance: DEMO_AAVE_BALANCE, isDemoMode: true };
-  }
+  const { wallet, provider } = getSigner();
+  const aToken = new Contract(AUSDC_SEPOLIA, ERC20_ABI, provider);
+  const raw = await aToken.balanceOf(wallet.address) as bigint;
+  return { aaveBalance: Number(formatUnits(raw, TOKEN_DECIMALS)), isDemoMode: false };
 }
 
 export async function depositToAave(amount: number): Promise<AaveDeposit> {
-  if (isDemoMode()) {
-    return { txHash: mockTxHash(), isDemoMode: true };
-  }
+  const { wallet } = getSigner();
+  const token = new Contract(TOKEN_ADDRESS, ERC20_ABI, wallet);
+  const pool = new Contract(AAVE_POOL_SEPOLIA, AAVE_POOL_ABI, wallet);
+  const amountBn = usdtToBaseUnits(amount);
 
-  try {
-    const { wallet } = await getSignerAndProvider();
-    const usdt = new Contract(USDT_SEPOLIA, ERC20_ABI, wallet);
-    const pool = new Contract(AAVE_POOL_SEPOLIA, AAVE_POOL_ABI, wallet);
-    const amountBn = usdtToBaseUnits(amount);
+  const approveTx = await token.approve(AAVE_POOL_SEPOLIA, amountBn) as { wait: () => Promise<unknown> };
+  await approveTx.wait();
 
-    const approveTx = await usdt.approve(AAVE_POOL_SEPOLIA, amountBn) as { wait: () => Promise<unknown> };
-    await approveTx.wait();
+  const supplyTx = await pool.supply(TOKEN_ADDRESS, amountBn, wallet.address, 0) as { hash: string; wait: () => Promise<unknown> };
+  await supplyTx.wait();
 
-    const supplyTx = await pool.supply(USDT_SEPOLIA, amountBn, wallet.address, 0) as { hash: string; wait: () => Promise<unknown> };
-    await supplyTx.wait();
-
-    return { txHash: supplyTx.hash, isDemoMode: false };
-  } catch {
-    return { txHash: mockTxHash(), isDemoMode: true };
-  }
+  return { txHash: supplyTx.hash, isDemoMode: false };
 }
 
 export async function withdrawFromAave(amount: number): Promise<AaveWithdraw> {
-  if (isDemoMode()) {
-    return { txHash: mockTxHash(), isDemoMode: true };
-  }
+  const { wallet } = getSigner();
+  const pool = new Contract(AAVE_POOL_SEPOLIA, AAVE_POOL_ABI, wallet);
+  const amountBn = usdtToBaseUnits(amount);
 
-  try {
-    const { wallet } = await getSignerAndProvider();
-    const pool = new Contract(AAVE_POOL_SEPOLIA, AAVE_POOL_ABI, wallet);
-    const amountBn = usdtToBaseUnits(amount);
+  const tx = await pool.withdraw(TOKEN_ADDRESS, amountBn, wallet.address) as { hash: string; wait: () => Promise<unknown> };
+  await tx.wait();
 
-    const tx = await pool.withdraw(USDT_SEPOLIA, amountBn, wallet.address) as { hash: string; wait: () => Promise<unknown> };
-    await tx.wait();
-
-    return { txHash: tx.hash, isDemoMode: false };
-  } catch {
-    return { txHash: mockTxHash(), isDemoMode: true };
-  }
+  return { txHash: tx.hash, isDemoMode: false };
 }
 
 export async function getYieldEarned(): Promise<AaveYield> {
-  if (isDemoMode()) {
-    return { yieldEarned: DEMO_YIELD, apy: DEMO_APY, isDemoMode: true };
-  }
-
-  try {
-    const { aaveBalance } = await getAaveBalance();
-    // Read deposited amount from a server-side approximation (no localStorage on server)
-    // Yield = current aUSDT balance - originally deposited amount
-    // Since we can't access localStorage server-side, we return balance-based estimate
-    const yieldEarned = Math.max(0, aaveBalance * 0.0042 * (30 / 365));
-    return { yieldEarned: Number(yieldEarned.toFixed(4)), apy: DEMO_APY, isDemoMode: false };
-  } catch {
-    return { yieldEarned: DEMO_YIELD, apy: DEMO_APY, isDemoMode: true };
-  }
+  const { aaveBalance } = await getAaveBalance();
+  // Yield estimate: aToken balance minus deposited (approximated as 4.2% APY pro-rated 30 days)
+  const yieldEarned = Math.max(0, aaveBalance * 0.042 * (30 / 365));
+  return { yieldEarned: Number(yieldEarned.toFixed(4)), apy: 4.2, isDemoMode: false };
 }

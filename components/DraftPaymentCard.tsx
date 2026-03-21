@@ -8,7 +8,7 @@ export function DraftPaymentCard({ draft }: { draft: DraftPayment }) {
         <p>
           Recipient: <span className="font-mono text-slate-300">{draft.to_address || 'Pending'}</span>
         </p>
-        <p>Amount: {draft.amount_usdt || 0} USDT</p>
+        <p>Amount: {draft.amount_usdt || 0} USDC</p>
         <p>Memo: {draft.memo?.trim() || 'Not set'}</p>
       </div>
     </div>

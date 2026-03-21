@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runClaudeParser } from '@/lib/claude';
 import type { AgentResponse, DraftPayment } from '@/lib/types';
 
-const ETH_ADDRESS_REGEX = /0x[a-fA-F0-9]{40}/;
-const AMOUNT_REGEX = /(\d+(?:\.\d+)?)\s*usdt?/i;
+// Strict ETH address: must be exactly 0x + 40 hex chars, not part of a longer hex string
+const ETH_ADDRESS_REGEX = /(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/;
+const AMOUNT_REGEX = /(\d+(?:\.\d+)?)\s*usd[ct]?/i;
+
+function normalizeAddress(raw: string | null | undefined): string {
+  // Lowercase before validation — ethers v6 rejects non-EIP55-checksummed mixed-case addresses
+  return (raw ?? '').trim().replace(/[\r\n\t]/g, '').toLowerCase();
+}
 
 function fallbackResponse(message: string): AgentResponse {
   return {
@@ -54,10 +60,13 @@ function parseRuleBased(input: string, draft: DraftPayment | null): AgentRespons
   const hasSendIntent = /(send|pay|transfer)/i.test(lower);
   const amount = AMOUNT_REGEX.exec(lower);
   const address = ETH_ADDRESS_REGEX.exec(input);
+  const cleanAddress = address ? normalizeAddress(address[0]) : null;
 
-  if (hasSendIntent && (amount || address || draft)) {
+  console.log('Parsed address:', cleanAddress);
+
+  if (hasSendIntent && (amount || cleanAddress || draft)) {
     const nextDraft: DraftPayment = {
-      to_address: address?.[0] || draft?.to_address || '',
+      to_address: cleanAddress || draft?.to_address || '',
       amount_usdt: amount ? Number(amount[1]) : draft?.amount_usdt || 0,
       memo: draft?.memo
     };

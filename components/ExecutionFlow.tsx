@@ -205,7 +205,7 @@ export function ExecutionFlow({
               >
                 <div style={{ color: '#00c896', fontWeight: 700, fontSize: 14 }}>Payment Complete ✓</div>
                 <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Amount: {amount ?? 0} USDT</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Amount: {amount ?? 0} USDC</div>
                   <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>To: {formatRecipient(recipient)}</div>
                   <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>Memo: {memo || '-'}</div>
                   {txHash ? (

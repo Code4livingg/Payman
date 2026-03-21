@@ -47,9 +47,6 @@ export const storage = {
   getInvoices: () => getJSON<Invoice[]>(STORAGE_KEYS.invoices, []),
   setInvoices: (value: Invoice[]) => setJSON(STORAGE_KEYS.invoices, value),
 
-  getWalletMode: () => getJSON<'metamask' | 'demo'>(STORAGE_KEYS.walletMode, 'demo'),
-  setWalletMode: (value: 'metamask' | 'demo') => setJSON(STORAGE_KEYS.walletMode, value),
-
   getWalletAddress: () => getJSON<string>(STORAGE_KEYS.walletAddress, ''),
   setWalletAddress: (value: string) => setJSON(STORAGE_KEYS.walletAddress, value),
 

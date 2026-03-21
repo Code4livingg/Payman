@@ -25,7 +25,7 @@ export function InvoicesList({ invoices }: { invoices: Invoice[] }) {
               {invoice.status}
             </span>
           </div>
-          <p className="mt-1 text-slate-300">{invoice.amount_usdt} USDT - {invoice.description}</p>
+          <p className="mt-1 text-slate-300">{invoice.amount_usdt} USDC - {invoice.description}</p>
           <p className="text-xs text-slate-400">Due: {formatDate(invoice.due_date)}</p>
           <Link href={`/invoice/${invoice.id}`} className="mt-2 inline-flex text-xs text-emerald-300 hover:text-emerald-200">
             Open invoice

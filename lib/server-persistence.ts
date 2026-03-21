@@ -1,7 +1,7 @@
 import type { Policy as AppPolicy } from './types';
 import { db } from './db';
 
-const FALLBACK_USER_ID = 'demo_user';
+const FALLBACK_USER_ID = 'wdk_user';
 
 export function normalizeUserId(input?: string | null): string {
   const value = (input || '').trim();
@@ -104,7 +104,7 @@ export async function createTransaction(input: {
   amount: number;
   memo?: string;
   txHash: string;
-  status: 'success' | 'failed' | 'demo';
+  status: 'success' | 'failed';
 }) {
   const userId = await ensureUser(input.userId);
   return db.transaction.create({
@@ -130,7 +130,7 @@ export async function getTransactions(userIdRaw?: string | null) {
 export async function getInsights(userIdRaw?: string | null) {
   const userId = await ensureUser(userIdRaw);
   const txs = await db.transaction.findMany({
-    where: { userId, status: { in: ['success', 'demo'] } },
+    where: { userId, status: { in: ['success'] } },
     select: { amount: true, createdAt: true }
   });
 

@@ -47,7 +47,10 @@ export function evaluatePaymentValidation(
 ): ValidationResult {
   const checks: ValidationCheck[] = [];
 
-  const addressValid = isAddress(draft.to_address);
+  // Lowercase before isAddress — ethers v6 rejects mixed-case addresses that don't match EIP-55 checksum
+  const cleanAddress = (draft.to_address ?? '').trim().replace(/[\r\n\t]/g, '').toLowerCase();
+  console.log('Policy validating address:', cleanAddress);
+  const addressValid = (() => { try { return isAddress(cleanAddress); } catch { return false; } })();
   checks.push({
     key: 'valid_ethereum_address',
     label: 'Valid Ethereum address',
@@ -85,7 +88,7 @@ export function evaluatePaymentValidation(
   let whitelistPassed = true;
   if (policy.whitelist_enabled) {
     const allowed = policy.whitelist.map((x) => x.toLowerCase());
-    whitelistPassed = allowed.includes(draft.to_address.toLowerCase());
+    whitelistPassed = allowed.includes(cleanAddress.toLowerCase());
   }
   checks.push({
     key: 'whitelist_check',
@@ -98,7 +101,7 @@ export function evaluatePaymentValidation(
   if (policy.block_duplicate_mins > 0) {
     duplicatePassed = !isDuplicateWithinWindow(
       activity,
-      draft.to_address,
+      cleanAddress,
       draft.amount_usdt,
       policy.block_duplicate_mins
     );

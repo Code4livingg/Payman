@@ -12,15 +12,11 @@ export async function GET() {
       ok: true,
       address: snapshot.address,
       usdt_balance: snapshot.usdtBalance,
-      demo: snapshot.demo,
       network: getNetworkLabel()
     });
   } catch (error) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : 'Failed to load wallet info'
-      },
+      { ok: false, error: error instanceof Error ? error.message : 'Failed to load wallet info' },
       { status: 500 }
     );
   }
@@ -40,7 +36,7 @@ export async function POST(request: NextRequest) {
     try {
       effectivePolicy = await getOrCreatePolicy(userId);
     } catch {
-      // DB unavailable, continue with incoming or default local policy
+      // DB unavailable — use incoming or default policy
     }
 
     const draft = {
@@ -48,6 +44,7 @@ export async function POST(request: NextRequest) {
       amount_usdt: body.amount_usdt,
       memo: body.memo
     };
+
     const validationResults = evaluatePaymentValidation(draft, effectivePolicy, body.activity || []);
     const policyCheck = validateDraftAgainstPolicy(draft, effectivePolicy, body.activity || []);
 
@@ -56,16 +53,18 @@ export async function POST(request: NextRequest) {
     }
 
     const quote = await quoteUsdtTransfer(body.to_address, body.amount_usdt);
+
     if (mode === 'quote') {
       return NextResponse.json({
         ok: true,
         fee_eth: quote.feeEth,
-        network: getNetworkLabel(),
-        demo: quote.demo
+        network: getNetworkLabel()
       });
     }
 
+    // Execute real transfer — throws on failure, no silent fallback
     const result = await sendUsdtTransfer(body.to_address, body.amount_usdt, body.memo);
+
     const explanation = generateExplanation({
       triggerType: 'manual_command',
       policy: effectivePolicy,
@@ -80,10 +79,10 @@ export async function POST(request: NextRequest) {
         amount: body.amount_usdt,
         memo: body.memo,
         txHash: result.txHash,
-        status: result.demo ? 'demo' : 'success'
+        status: 'success'
       });
     } catch {
-      // DB failure should not block payment flow
+      // DB failure must not block confirmed on-chain payment
     }
 
     return NextResponse.json({
@@ -96,15 +95,11 @@ export async function POST(request: NextRequest) {
       fee_eth: result.feeEth,
       from_address: result.fromAddress,
       network: getNetworkLabel(),
-      fallback: result.demo,
       explanation
     });
   } catch (error) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : 'Transfer failed'
-      },
+      { ok: false, error: error instanceof Error ? error.message : 'Transfer failed' },
       { status: 500 }
     );
   }

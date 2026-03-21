@@ -13,7 +13,7 @@ export function PaymentConfirmCard({ draft, feeEth, sending, onConfirm }: Props)
       <p className="text-xs uppercase tracking-[0.14em] text-[#00c896]">Ready To Confirm</p>
       <div className="mt-3 grid gap-1">
         <p>Recipient: <span className="font-mono">{draft.to_address}</span></p>
-        <p>Amount: {draft.amount_usdt} USDT</p>
+        <p>Amount: {draft.amount_usdt} USDC</p>
         <p>Network: Sepolia</p>
         <p>Memo: {draft.memo || 'N/A'}</p>
         <p>Estimated fee: {feeEth || 'Estimating...'} ETH</p>

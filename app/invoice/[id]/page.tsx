@@ -18,7 +18,7 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
   const payUrl = useMemo(() => {
     if (!invoice) return '/app';
     const cmd = encodeURIComponent(
-      `Send ${invoice.amount_usdt} USDT to ${invoice.recipient_wallet} for invoice ${invoice.id}`
+      `Send ${invoice.amount_usdt} USDC to ${invoice.recipient_wallet} for invoice ${invoice.id}`
     );
     return `/app?prefill=${cmd}`;
   }, [invoice]);
@@ -44,7 +44,7 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
         <h1 className="mt-2 text-3xl font-semibold text-white">{invoice.id}</h1>
 
         <div className="mt-8 grid gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-sm md:grid-cols-2">
-          <p className="text-slate-300">Amount: <span className="text-emerald-300">{invoice.amount_usdt} USDT</span></p>
+          <p className="text-slate-300">Amount: <span className="text-emerald-300">{invoice.amount_usdt} USDC</span></p>
           <p className="text-slate-300">Status: <span className="capitalize">{invoice.status}</span></p>
           <p className="text-slate-300">Issue date: {formatDate(invoice.issue_date)}</p>
           <p className="text-slate-300">Due date: {formatDate(invoice.due_date)}</p>

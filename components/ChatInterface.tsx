@@ -150,7 +150,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     last7DaysSpend: 0,
     transactionCount: 0
   });
-  const [showSessionChoice, setShowSessionChoice] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [execFlow, setExecFlow] = useState<ExecFlowState>({
     status: 'idle',
@@ -170,20 +169,17 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   useEffect(() => {
     try {
-      const savedSessions = storage.getChatSessions();
-      const activeSession = storage.getActiveSession();
-      const targetId = sessionId || activeSession || savedSessions[0]?.id || generateId('session');
-      const existing = savedSessions.find((session) => session.id === targetId);
-      const initialMessages = existing?.messages?.length ? existing.messages : [agentMessage('Execution request initiated. Select an action to continue.')];
-
-      setSessions(savedSessions);
-      setCurrentSessionId(targetId);
-      setMessages(initialMessages);
+      // Always start with a fresh chat — messages are ephemeral UI state
+      const newSessionId = sessionId || generateId('session');
+      setCurrentSessionId(newSessionId);
+      setMessages([]);
       setDraft(storage.getDraft());
       setPolicy(storage.getPolicy());
       setActivity(storage.getActivity());
       setSchedules(storage.getSchedules());
       setInvoices(storage.getInvoices());
+      // Keep sessions list for reference but don't restore messages
+      setSessions(storage.getChatSessions());
     } catch (error) {
       console.error('Failed to hydrate Payman state', error);
     } finally {
@@ -385,14 +381,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
   useEffect(() => () => clearExecFlowTimers(), []);
 
-  const showFlowCompleteChoice = () => {
-    setShowSessionChoice(true);
-    setMessages((prev) => [
-      ...prev,
-      agentMessage('Do you want to continue or start a new session?', 'system')
-    ]);
-  };
-
   const startNewSession = () => {
     const nextSessionId = generateId('session');
     setCurrentSessionId(nextSessionId);
@@ -402,9 +390,8 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setSending(false);
     setFeeEth('');
     setPaymentExplanations([]);
-    setShowSessionChoice(false);
     resetExecutionFlow();
-    setMessages([agentMessage('Execution request initiated. Select an action to continue.')]);
+    setMessages([]);
   };
 
   const getCurrentWalletId = () => {
@@ -605,7 +592,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           metadata: { to_address: currentDraft.to_address, amount_usdt: currentDraft.amount_usdt, wallet_mode: 'wdk' }
         });
         setMessages((prev) => [...prev, agentMessage(`Execution blocked by policy: ${reason}`, 'system')]);
-        showFlowCompleteChoice();
+
         return;
       }
 
@@ -649,7 +636,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           rejectionReason: sendResult.error || 'Execution failed'
         }));
       }
-      showFlowCompleteChoice();
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Execution error';
       setExecFlow({
@@ -662,7 +648,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         memo: currentDraft.memo || ''
       });
       setMessages((prev) => [...prev, agentMessage(`Execution error: ${reason}`, 'system')]);
-      showFlowCompleteChoice();
     } finally {
       setSending(false);
     }
@@ -671,7 +656,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const onSendMessage = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text) return;
-    setShowSessionChoice(false);
 
     const nextUserMessage = userMessage(text);
     setMessages((prev) => [...prev, nextUserMessage]);
@@ -776,7 +760,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             metadata: { schedule_id: schedule.id }
           });
           setMessages((prev) => [...prev, agentMessage(`Schedule created: ${schedule.amount_usdt} USDC ${schedule.frequency} to ${toAddress.slice(0, 6)}...${toAddress.slice(-4)}.`, 'system')]);
-          showFlowCompleteChoice();
+  
           setTyping(false);
           return;
         }
@@ -822,7 +806,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             metadata: { invoice_id: invoice.id }
           });
           setMessages((prev) => [...prev, agentMessage(`Invoice ${invoice.id} created for ${invoice.amount_usdt} USDC.`, 'system')]);
-          showFlowCompleteChoice();
+  
           setTyping(false);
           return;
         }
@@ -830,7 +814,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
       if (parsed.type === 'query' && /spent/i.test(lower)) {
         setMessages((prev) => [...prev, agentMessage(`Spending summary: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)]);
-        showFlowCompleteChoice();
+
         setTyping(false);
         return;
       }
@@ -1178,6 +1162,22 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         </aside>
 
         <main className="flex min-h-[80vh] flex-col rounded-2xl border border-white/10 bg-white/[0.02] shadow-xl backdrop-blur-xl">
+          {/* Chat header */}
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">Execution Session Active</span>
+            </div>
+            <button
+              onClick={startNewSession}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-slate-400 transition hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.06)] hover:text-slate-200"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M5 1v3.5L7 6M9 5A4 4 0 1 1 1 5a4 4 0 0 1 8 0Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              New Session
+            </button>
+          </div>
           <div className="flex-1 space-y-3 overflow-y-auto p-4 md:p-6">
             {!messages.length && (
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -1211,26 +1211,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
                   <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.1s]" />
                   <span className="h-2 w-2 animate-bounce rounded-full bg-slate-300" />
                 </span>
-              </div>
-            )}
-
-            {showSessionChoice && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="mb-3 text-sm text-slate-300">Do you want to continue or start a new session?</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setShowSessionChoice(false)}
-                    className="rounded-full border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-slate-200 hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.08)]"
-                  >
-                    Continue Chat
-                  </button>
-                  <button
-                    onClick={startNewSession}
-                    className="rounded-full bg-[#00c896] px-3 py-2 text-sm font-medium text-black hover:brightness-110"
-                  >
-                    Start New Chat
-                  </button>
-                </div>
               </div>
             )}
           </div>

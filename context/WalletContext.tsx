@@ -47,10 +47,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  if (!hydrated) {
-    return null;
-  }
-
   return (
     <WalletContext.Provider value={{ wallet, setWallet }}>
       {children}

@@ -5,19 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, RefreshCcw, Settings } from 'lucide-react';
 import { ActivityFeed } from './ActivityFeed';
-import { DraftPaymentCard } from './DraftPaymentCard';
 import { ExecutionFlow, type ExecutionFlowStatus } from './ExecutionFlow';
 import { InvoicesList } from './InvoicesList';
 import { InsightsCards } from './InsightsCards';
 import { MessageBubble } from './MessageBubble';
-import { PaymentConfirmCard } from './PaymentConfirmCard';
 import { PaymentExplanationCard } from './PaymentExplanationCard';
 import { PaymanLogo } from './PaymanLogo';
 import { SchedulesList } from './SchedulesList';
 import { TransactionHistoryPanel } from './TransactionHistoryPanel';
-import { generateExplanation } from '@/lib/explainer';
 import { truncateAddress } from '@/lib/metamask';
-import { evaluatePaymentValidation } from '@/lib/policy';
 import { storage } from '@/lib/storage';
 import type {
   ActivityItem,
@@ -32,7 +28,6 @@ import type {
   Schedule,
   TabType
 } from '@/lib/types';
-import { computeNextRun, generateId } from '@/lib/utils';
 
 const PROMPTS = [
   'Send 20 USDC to 0x742d35Cc6634C0532925a3b844Bc454e4438f44e for design work',
@@ -40,7 +35,6 @@ const PROMPTS = [
   'Create invoice for 500 USDC for logo design',
   'How much have I spent this week?'
 ];
-type GuidedFlow = 'menu' | 'send' | 'schedule';
 
 interface WalletState {
   address: string;
@@ -140,7 +134,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tab, setTab] = useState<TabType>('activity');
-  const walletMode = 'wdk' as const;
   const [wallet, setWallet] = useState<WalletState>({
     address: 'Loading...',
     usdt_balance: '0.00',
@@ -148,8 +141,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     label: 'WDK Wallet'
   });
   const [feeEth, setFeeEth] = useState<string>('');
-  const [input, setInput] = useState('');
-  const [typing, setTyping] = useState(false);
+  const [input, setInput] = useState('');  const [typing, setTyping] = useState(false);
   const [sending, setSending] = useState(false);
   const [paymentExplanations, setPaymentExplanations] = useState<ExplanationEntry[]>([]);
   const [transactions, setTransactions] = useState<DbTransaction[]>([]);
@@ -158,11 +150,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     last7DaysSpend: 0,
     transactionCount: 0
   });
-  const [guidedFlow, setGuidedFlow] = useState<GuidedFlow>('menu');
-  const [guidedStep, setGuidedStep] = useState(0);
-  const [guidedRecipient, setGuidedRecipient] = useState('');
-  const [guidedAmount, setGuidedAmount] = useState<number>(0);
-  const [guidedWhen, setGuidedWhen] = useState('');
   const [showSessionChoice, setShowSessionChoice] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [execFlow, setExecFlow] = useState<ExecFlowState>({
@@ -328,8 +315,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     storage.setLocalTransactions([next, ...current].slice(0, 200));
   };
 
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
   const handleAaveDeposit = async (amount: number) => {
     setAaveLoading(true);
     try {
@@ -415,11 +400,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setInput('');
     setTyping(false);
     setSending(false);
-    setGuidedFlow('menu');
-    setGuidedStep(0);
-    setGuidedRecipient('');
-    setGuidedAmount(0);
-    setGuidedWhen('');
     setFeeEth('');
     setPaymentExplanations([]);
     setShowSessionChoice(false);
@@ -554,33 +534,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     }
   }, [hydrated, prefill, messages.length]);
 
-  useEffect(() => {
-    if (!draft?.to_address || !draft.amount_usdt) {
-      setFeeEth('');
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      const resp = await fetch('/api/wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wallet: getCurrentWalletId(),
-          mode: 'quote',
-          to_address: draft.to_address,
-          amount_usdt: draft.amount_usdt,
-          memo: draft.memo,
-          policy,
-          activity
-        })
-      });
-      const data = await resp.json();
-      if (data.ok) setFeeEth(data.fee_eth || '0.00042');
-    }, 200);
-
-    return () => clearTimeout(timer);
-  }, [draft, policy, activity]);
-
   const executeDraftThroughPipeline = async (currentDraft: DraftPayment) => {
     setSending(true);
 
@@ -611,6 +564,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         } catch { /* non-blocking, proceed with payment */ }
       }
 
+      // Policy check
       const quoteResponse = await fetch('/api/wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -655,6 +609,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         return;
       }
 
+      // Policy passed — run execution steps then immediately execute
       clearExecFlowTimers();
       setExecFlow({
         status: 'running',
@@ -666,12 +621,35 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         memo: currentDraft.memo || ''
       });
 
-      execFlowTimersRef.current = [
-        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 1 })), 700),
-        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 2 })), 1400),
-        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 3 })), 2100),
-        window.setTimeout(() => setExecFlow((prev) => ({ ...prev, status: 'awaiting', currentStep: 4 })), 2800)
-      ];
+      // Animate through steps 1-3, then execute
+      await new Promise<void>((resolve) => {
+        execFlowTimersRef.current = [
+          window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 1 })), 500),
+          window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 2 })), 1000),
+          window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 3 })), 1500),
+          window.setTimeout(() => setExecFlow((prev) => ({ ...prev, currentStep: 5 })), 2000),
+          window.setTimeout(() => resolve(), 2100)
+        ];
+      });
+
+      // Execute immediately — no confirmation step
+      const sendResult = await executeApiPayment(currentDraft);
+      if (sendResult.ok) {
+        setExecFlow((prev) => ({
+          ...prev,
+          status: 'complete',
+          currentStep: 6,
+          txHash: sendResult.txHash || ''
+        }));
+      } else {
+        setExecFlow((prev) => ({
+          ...prev,
+          status: 'blocked',
+          currentStep: 5,
+          rejectionReason: sendResult.error || 'Execution failed'
+        }));
+      }
+      showFlowCompleteChoice();
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Execution error';
       setExecFlow({
@@ -690,202 +668,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     }
   };
 
-  const handleExecutionConfirm = async () => {
-    if (!draft) return;
-
-    setSending(true);
-    clearExecFlowTimers();
-    setExecFlow((prev) => ({
-      ...prev,
-      status: 'running',
-      currentStep: 5,
-      rejectionReason: '',
-      txHash: ''
-    }));
-
-    try {
-      console.log('Executing via WDK only — no fallback enabled');
-
-      const sendResult = await executeApiPayment(draft);
-      if (sendResult.ok) {
-        await wait(1500);
-        setExecFlow((prev) => ({ ...prev, currentStep: 6 }));
-        setExecFlow((prev) => ({
-          ...prev,
-          status: 'complete',
-          currentStep: 6,
-          txHash: sendResult.txHash || ''
-        }));
-      } else {
-        setExecFlow((prev) => ({
-          ...prev,
-          status: 'blocked',
-          currentStep: 5,
-          rejectionReason: sendResult.error || 'Execution failed'
-        }));
-      }
-      showFlowCompleteChoice();
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Execution error';
-      setExecFlow((prev) => ({
-        ...prev,
-        status: 'blocked',
-        currentStep: 5,
-        rejectionReason: reason
-      }));
-      setMessages((prev) => [...prev, agentMessage(`Execution error: ${reason}`, 'system')]);
-      showFlowCompleteChoice();
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const resetGuided = () => {
-    setGuidedStep(0);
-    setGuidedRecipient('');
-    setGuidedAmount(0);
-    setGuidedWhen('');
-    setGuidedFlow('menu');
-  };
-
-  const startGuidedFlow = (flow: GuidedFlow) => {
-    setGuidedFlow(flow);
-    setGuidedRecipient('');
-    setGuidedAmount(0);
-    setGuidedWhen('');
-    setGuidedStep(1);
-    setMessages((prev) => [
-      ...prev,
-      agentMessage(
-        flow === 'send'
-          ? 'Execution request initiated. Provide recipient address.'
-          : 'Execution request initiated. Provide recipient for scheduled payment.'
-      )
-    ]);
-  };
-
-  const handleGuidedInput = async (text: string): Promise<boolean> => {
-    if (guidedStep === 0) return false;
-
-    if (guidedFlow === 'send') {
-      if (guidedStep === 1) {
-        // Extract address if user pasted a full sentence, otherwise use raw input
-        const extracted = text.match(/(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/);
-        const cleanRecipient = extracted ? extracted[0].trim().toLowerCase() : text.trim().replace(/[\r\n\t]/g, '').toLowerCase();
-        console.log('Parsed address (guided):', cleanRecipient);
-        setGuidedRecipient(cleanRecipient);
-        setGuidedStep(2);
-        setMessages((prev) => [...prev, agentMessage('Validating input... Provide USDC amount.')]);
-        return true;
-      }
-
-      if (guidedStep === 2) {
-        const amount = Number(text);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          setMessages((prev) => [...prev, agentMessage('Validation failed. Enter a valid USDC amount (for example: 20).', 'system')]);
-          return true;
-        }
-        setGuidedAmount(amount);
-        setGuidedStep(3);
-        setMessages((prev) => [...prev, agentMessage(`Authorization checkpoint: send ${amount} USDC to ${guidedRecipient}. Type "yes" to confirm.`)]);
-        return true;
-      }
-
-      if (guidedStep === 3) {
-        if (!/^(yes|confirm|send)$/i.test(text)) {
-          setMessages((prev) => [...prev, agentMessage('Execution cancelled. Returning to command menu.', 'system')]);
-          resetGuided();
-          return true;
-        }
-
-        const nextDraft: DraftPayment = {
-          to_address: guidedRecipient,
-          amount_usdt: guidedAmount,
-          memo: 'Guided payment'
-        };
-
-        setDraft(nextDraft);
-        setMessages((prev) => [...prev, agentMessage('Running policy checks... Authorization in progress...', 'system')]);
-        resetGuided();
-        await executeDraftThroughPipeline(nextDraft);
-        return true;
-      }
-    }
-
-    if (guidedFlow === 'schedule') {
-      if (guidedStep === 1) {
-        const extracted = text.match(/(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/);
-        const cleanRecipient = extracted ? extracted[0].trim().toLowerCase() : text.trim().replace(/[\r\n\t]/g, '').toLowerCase();
-        console.log('Parsed address (guided schedule):', cleanRecipient);
-        setGuidedRecipient(cleanRecipient);
-        setGuidedStep(2);
-        setMessages((prev) => [...prev, agentMessage('Validating input... Provide scheduled USDC amount.')]);
-        return true;
-      }
-
-      if (guidedStep === 2) {
-        const amount = Number(text);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          setMessages((prev) => [...prev, agentMessage('Validation failed. Enter a valid USDC amount (for example: 100).', 'system')]);
-          return true;
-        }
-        setGuidedAmount(amount);
-        setGuidedStep(3);
-        setMessages((prev) => [...prev, agentMessage('Execution schedule requested. Provide date or delay trigger.')]);
-        return true;
-      }
-
-      if (guidedStep === 3) {
-        setGuidedWhen(text);
-        setGuidedStep(4);
-        setMessages((prev) => [
-          ...prev,
-          agentMessage(`Authorization checkpoint: schedule ${guidedAmount} USDC to ${guidedRecipient} for "${text}". Type "yes" to confirm.`)
-        ]);
-        return true;
-      }
-
-      if (guidedStep === 4) {
-        if (!/^(yes|confirm|schedule)$/i.test(text)) {
-          setMessages((prev) => [...prev, agentMessage('Schedule execution cancelled. Returning to command menu.', 'system')]);
-          resetGuided();
-          return true;
-        }
-
-        const now = new Date().toISOString();
-        const schedule: Schedule = {
-          id: generateId('sch'),
-          to_address: guidedRecipient,
-          amount_usdt: guidedAmount,
-          memo: `Scheduled for ${guidedWhen}`,
-          frequency: 'weekly',
-          start_date: now,
-          next_run: computeNextRun('weekly', now),
-          total_executed: 0,
-          paused: false,
-          created_at: now,
-          label: 'Guided schedule'
-        };
-        setSchedules((prev) => [schedule, ...prev]);
-        addActivity({
-          type: 'schedule_executed',
-          title: 'Schedule created',
-          description: `${guidedAmount} USDC to ${guidedRecipient} (${guidedWhen})`,
-          metadata: { schedule_id: schedule.id }
-        });
-        setMessages((prev) => [
-          ...prev,
-          agentMessage('Schedule created. Policy checks passed. Execution simulation queued.', 'system')
-        ]);
-        resetGuided();
-        showFlowCompleteChoice();
-        return true;
-      }
-    }
-
-    return false;
-  };
-
   const onSendMessage = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text) return;
@@ -896,36 +678,46 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setInput('');
 
     const lower = text.toLowerCase();
-    if (guidedStep > 0) {
-      const handledGuided = await handleGuidedInput(text);
-      if (handledGuided) return;
+
+    // Detect single-step send intent: has both address and amount
+    const isSendIntent = /\bsend\b/i.test(text) || /\bpay\b/i.test(text);
+    const parsedAddress = parseAddress(text);
+    const parsedAmount = parseAmount(text);
+
+    if (isSendIntent && parsedAddress && parsedAmount > 0) {
+      const memoMatch = text.match(/for\s+(.+)$/i);
+      const memo = memoMatch ? memoMatch[1].trim() : undefined;
+      const execDraft: DraftPayment = {
+        to_address: parsedAddress,
+        amount_usdt: parsedAmount,
+        memo
+      };
+      setDraft(execDraft);
+      setMessages((prev) => [...prev, agentMessage('Execution request initiated.', 'system')]);
+      await executeDraftThroughPipeline(execDraft);
+      return;
+    }
+
+    // Detect send intent but missing data
+    if (isSendIntent && (!parsedAddress || parsedAmount <= 0)) {
+      setMessages((prev) => [...prev, agentMessage('Invalid transaction format. Provide: amount, token, and recipient address.', 'system')]);
+      return;
     }
 
     if (['hi', 'hello', 'hey'].includes(lower)) {
-      resetGuided();
       setMessages((prev) => [...prev, agentMessage('Execution request initiated. Select an action to continue.')]);
-      return;
-    }
-
-    if (lower === 'send payment') {
-      startGuidedFlow('send');
-      return;
-    }
-
-    if (lower === 'schedule payment') {
-      startGuidedFlow('schedule');
       return;
     }
 
     if (lower === 'view invoices') {
       setTab('invoices');
-      setMessages((prev) => [...prev, agentMessage('Invoice ledger opened. Review pending and paid records in the sidebar.')]);
+      setMessages((prev) => [...prev, agentMessage('Invoice ledger opened.')]);
       return;
     }
 
     if (lower === 'check spending') {
       setTab('activity');
-      setMessages((prev) => [...prev, agentMessage(`Spending summary generated: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)]);
+      setMessages((prev) => [...prev, agentMessage(`Spending summary: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)]);
       return;
     }
 
@@ -942,10 +734,18 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
 
       if (parsed.type === 'cancel') {
         setDraft(null);
+        setMessages((prev) => [...prev, agentMessage('Execution cancelled.', 'system')]);
+        setTyping(false);
+        return;
       }
 
-      if (parsed.draft) {
+      // If agent returns a complete send draft, execute immediately
+      if ((parsed.type === 'send' || parsed.type === 'update_draft') && parsed.draft?.to_address && parsed.draft?.amount_usdt) {
         setDraft(parsed.draft);
+        setMessages((prev) => [...prev, agentMessage('Execution request initiated.', 'system')]);
+        setTyping(false);
+        await executeDraftThroughPipeline(parsed.draft);
+        return;
       }
 
       if (parsed.type === 'schedule') {
@@ -975,6 +775,10 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             description: `${schedule.label}: ${schedule.amount_usdt} USDC ${schedule.frequency}`,
             metadata: { schedule_id: schedule.id }
           });
+          setMessages((prev) => [...prev, agentMessage(`Schedule created: ${schedule.amount_usdt} USDC ${schedule.frequency} to ${toAddress.slice(0, 6)}...${toAddress.slice(-4)}.`, 'system')]);
+          showFlowCompleteChoice();
+          setTyping(false);
+          return;
         }
 
         if (/pause/i.test(text)) {
@@ -984,9 +788,12 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             addActivity({
               type: 'schedule_paused',
               title: 'Schedule paused',
-              description: `${target.label} was paused from chat command`,
+              description: `${target.label} paused`,
               metadata: { schedule_id: target.id }
             });
+            setMessages((prev) => [...prev, agentMessage(`Schedule paused: ${target.label}.`, 'system')]);
+            setTyping(false);
+            return;
           }
         }
       }
@@ -1007,7 +814,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             status: 'pending',
             created_at: now.toISOString()
           };
-
           setInvoices((prev) => [invoice, ...prev]);
           addActivity({
             type: 'invoice_generated',
@@ -1015,31 +821,31 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
             description: `${invoice.id} for ${invoice.amount_usdt} USDC`,
             metadata: { invoice_id: invoice.id }
           });
-          setMessages((prev) => [
-            ...prev,
-            agentMessage(`${parsed.message}\nInvoice ${invoice.id} has been created and is shareable.`)
-          ]);
+          setMessages((prev) => [...prev, agentMessage(`Invoice ${invoice.id} created for ${invoice.amount_usdt} USDC.`, 'system')]);
           showFlowCompleteChoice();
           setTyping(false);
           return;
         }
       }
 
-      if (parsed.type === 'query' && /spent/i.test(text.toLowerCase())) {
-        setMessages((prev) => [
-          ...prev,
-          agentMessage(`Spending summary generated: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)
-        ]);
+      if (parsed.type === 'query' && /spent/i.test(lower)) {
+        setMessages((prev) => [...prev, agentMessage(`Spending summary: ${spentThisWeek.toFixed(2)} USDC in the last 7 days.`)]);
         showFlowCompleteChoice();
         setTyping(false);
         return;
       }
 
-      setMessages((prev) => [...prev, agentMessage(parsed.message)]);
+      // Fallback: show agent message only if it's not conversational filler
+      const isFillerResponse = /i can help|please provide|what would you|let me know|sure|of course/i.test(parsed.message);
+      if (!isFillerResponse && parsed.message) {
+        setMessages((prev) => [...prev, agentMessage(parsed.message)]);
+      } else {
+        setMessages((prev) => [...prev, agentMessage('Invalid transaction format. Provide: amount, token, and recipient address.', 'system')]);
+      }
     } catch (error) {
       setMessages((prev) => [
         ...prev,
-        agentMessage(`Parser exception detected: ${error instanceof Error ? error.message : 'unknown error'}`, 'system')
+        agentMessage(`Parser exception: ${error instanceof Error ? error.message : 'unknown error'}`, 'system')
       ]);
     } finally {
       setTyping(false);
@@ -1115,11 +921,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setDraft(null);
     await fetchWallet();
     return { ok: true, txHash: data.tx_hash };
-  };
-
-  const onConfirmPayment = async () => {
-    if (!draft) return;
-    await executeDraftThroughPipeline(draft);
   };
 
   const handleInputChange = (value: string) => {
@@ -1255,8 +1056,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   if (!hydrated) {
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Loading Payman...</div>;
   }
-
-  const showConfirm = Boolean(draft?.to_address && draft?.amount_usdt && execFlow.status === 'idle');
 
   return (
     <div
@@ -1397,34 +1196,11 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
               </div>
             )}
 
-            {guidedStep === 0 && messages.length <= 2 && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-all duration-300 ease-in-out">
-                <p className="mb-3 text-sm text-slate-300">Choose an action:</p>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {['Send Payment', 'Schedule Payment', 'View Invoices', 'Check Spending'].map((option, idx) => (
-                    <button
-                      key={option}
-                      onClick={() => onSendMessage(option)}
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left text-sm text-slate-200 transition hover:border-[#00c896]/40 hover:bg-[rgba(0,200,150,0.04)]"
-                    >
-                      <span className={`mr-2 inline-block h-2 w-2 rounded-full ${idx === 0 ? 'bg-[#00c896]' : idx === 1 ? 'bg-[#7c3aed]' : idx === 2 ? 'bg-cyan-300' : 'bg-amber-300'}`} />
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
             {paymentExplanations.map((item) =>
               item.explanation ? <PaymentExplanationCard key={item.id} explanation={item.explanation} /> : null
-            )}
-
-            {draft && <DraftPaymentCard draft={draft} />}
-            {showConfirm && draft && (
-              <PaymentConfirmCard draft={draft} feeEth={feeEth} sending={sending} onConfirm={onConfirmPayment} />
             )}
 
             {typing && (
@@ -1470,7 +1246,6 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
                   amount={execFlow.amount}
                   recipient={execFlow.recipient}
                   memo={execFlow.memo}
-                  onConfirm={handleExecutionConfirm}
                   onRetry={resetExecutionFlow}
                   onOpenSettings={() => router.push('/settings')}
                 />

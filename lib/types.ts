@@ -29,6 +29,7 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   createdAt: string;
+  txHash?: string;
 }
 
 export interface ChatSession {

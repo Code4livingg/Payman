@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     event: 'github_payment_released',
     message: matchedSchedule
       ? `PR merged in ${payload.repository?.name || 'repo'} — sent ${matchedSchedule.amount_usdt || 'X'} USDT to ${matchedSchedule.to_address || '0x...'}`
-      : `PR merged in ${payload.repository?.name || 'repo'} — sent X USDT to 0x... (demo trigger).`,
+      : `PR merged in ${payload.repository?.name || 'repo'} — sent X USDC to 0x... (demo trigger).`,
     metadata: {
       repo: payload.repository?.name || 'unknown',
       pr_title: payload.pull_request?.title || '',

@@ -1,6 +1,11 @@
 import { cn, formatDate } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/types';
 
+function shortenHash(hash: string): string {
+  if (!hash || hash.length < 10) return hash;
+  return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
+}
+
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -22,6 +27,26 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         )}
       >
         <p>{message.content}</p>
+
+        {message.txHash && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="font-mono text-[11px] text-emerald-400/70">
+              {shortenHash(message.txHash)}
+            </span>
+            <a
+              href={`https://sepolia.etherscan.io/tx/${message.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300 transition hover:border-emerald-400/60 hover:bg-emerald-500/20 hover:shadow-[0_0_8px_rgba(52,211,153,0.25)]"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
+                <path d="M1 9L9 1M9 1H3M9 1V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              View on Etherscan
+            </a>
+          </div>
+        )}
+
         <p className="mt-2 text-[11px] text-slate-400">{formatDate(message.createdAt)}</p>
       </div>
     </div>

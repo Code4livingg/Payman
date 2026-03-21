@@ -201,7 +201,7 @@ export default function SettingsPage() {
                     onChange={(event) => setPolicy((prev) => ({ ...prev, max_single_usdt: Number(event.target.value || 0) }))}
                     className="w-full bg-transparent text-lg text-white outline-none"
                   />
-                  <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDT</span>
+                  <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDC</span>
                 </div>
               </label>
 
@@ -214,7 +214,7 @@ export default function SettingsPage() {
                     onChange={(event) => setPolicy((prev) => ({ ...prev, daily_cap_usdt: Number(event.target.value || 0) }))}
                     className="w-full bg-transparent text-lg text-white outline-none"
                   />
-                  <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDT</span>
+                  <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDC</span>
                 </div>
               </label>
             </div>
@@ -373,7 +373,7 @@ export default function SettingsPage() {
                   }}
                   className="w-full bg-transparent text-lg text-white outline-none"
                 />
-                <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDT</span>
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDC</span>
               </div>
             </label>
 
@@ -390,7 +390,7 @@ export default function SettingsPage() {
                   }}
                   className="w-full bg-transparent text-lg text-white outline-none"
                 />
-                <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDT</span>
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">USDC</span>
               </div>
             </label>
           </div>

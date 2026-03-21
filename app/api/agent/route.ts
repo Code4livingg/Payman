@@ -116,7 +116,7 @@ function parseRuleBased(input: string, draft: DraftPayment | null): AgentRespons
     };
   }
 
-  return fallbackResponse('I can help with sending USDT, schedules, invoices, and spending summaries.');
+  return fallbackResponse('I can help with sending USDC, schedules, invoices, and spending summaries.');
 }
 
 export async function POST(request: NextRequest) {

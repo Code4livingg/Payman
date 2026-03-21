@@ -95,8 +95,8 @@ function userMessage(content: string): ChatMessage {
   return { id: generateId('msg'), role: 'user', content, createdAt: new Date().toISOString() };
 }
 
-function agentMessage(content: string, role: 'agent' | 'system' = 'agent'): ChatMessage {
-  return { id: generateId('msg'), role, content, createdAt: new Date().toISOString() };
+function agentMessage(content: string, role: 'agent' | 'system' = 'agent', txHash?: string): ChatMessage {
+  return { id: generateId('msg'), role, content, createdAt: new Date().toISOString(), txHash };
 }
 
 function parseAmount(text: string): number {
@@ -1102,8 +1102,9 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setMessages((prev) => [
       ...prev,
       agentMessage(
-        `Transaction submitted. Tx: ${data.tx_hash}\nExplorer: ${data.explorer_url}`,
-        'system'
+        `Payment confirmed. ${currentDraft.amount_usdt} USDC sent successfully.`,
+        'system',
+        data.tx_hash
       )
     ]);
 

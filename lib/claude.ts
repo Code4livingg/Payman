@@ -3,7 +3,7 @@ import type { AgentResponse, DraftPayment } from './types';
 
 const MODEL = 'claude-3-5-haiku-latest';
 
-const SYSTEM_PROMPT = `You are Payman, an autonomous USDT payment agent.
+const SYSTEM_PROMPT = `You are Payman, an autonomous USDC payment agent.
 Parse user messages and maintain a draftPayment object.
 Always return JSON in this exact format:
 {
@@ -13,7 +13,7 @@ Always return JSON in this exact format:
   "ready_to_confirm": boolean
 }
 For multi-turn drafting:
-- 'send 25 USDT to 0x...' -> set draft, ask for memo
+- 'send 25 USDC to 0x...' -> set draft, ask for memo
 - 'memo: salary' -> update draft memo, show full draft, ask confirm
 - 'make it 20' -> update draft amount
 - 'cancel' -> clear draft

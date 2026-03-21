@@ -61,7 +61,7 @@ export function evaluatePaymentValidation(
   const amountPositive = draft.amount_usdt > 0;
   checks.push({
     key: 'amount_positive',
-    label: 'Positive USDT amount',
+    label: 'Positive USDC amount',
     status: amountPositive ? 'passed' : 'failed',
     detail: amountPositive ? undefined : 'Amount must be greater than zero.'
   });
@@ -82,7 +82,7 @@ export function evaluatePaymentValidation(
     key: 'within_daily_cap',
     label: 'Within daily spending cap',
     status: withinDailyCap ? 'passed' : 'failed',
-    detail: withinDailyCap ? undefined : `Daily cap exceeded. Today spent ${spent} USDT.`
+    detail: withinDailyCap ? undefined : `Daily cap exceeded. Today spent ${spent} USDC.`
   });
 
   let whitelistPassed = true;

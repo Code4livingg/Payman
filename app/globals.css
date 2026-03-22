@@ -105,3 +105,13 @@
   0%, 100% { text-decoration-color: #00c896; }
   50% { text-decoration-color: #7c3aed; }
 }
+
+@keyframes shimmerText {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes spinIcon {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

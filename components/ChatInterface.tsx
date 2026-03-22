@@ -144,6 +144,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const [feeEth, setFeeEth] = useState<string>('');
   const [input, setInput] = useState('');  const [typing, setTyping] = useState(false);
   const [sending, setSending] = useState(false);
+  const [executionLoading, setExecutionLoading] = useState(false);
   const [paymentExplanations, setPaymentExplanations] = useState<ExplanationEntry[]>([]);
   const [transactions, setTransactions] = useState<DbTransaction[]>([]);
   const [insights, setInsights] = useState<InsightsState>({
@@ -389,6 +390,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setInput('');
     setTyping(false);
     setSending(false);
+    setExecutionLoading(false);
     setFeeEth('');
     setPaymentExplanations([]);
     resetExecutionFlow();
@@ -665,6 +667,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     // Reset per-execution state — prevents stale policy/flow UI from previous run
     setPaymentExplanations([]);
     resetExecutionFlow();
+    setExecutionLoading(true);
 
     const lower = text.toLowerCase();
 
@@ -683,12 +686,14 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       };
       setDraft(execDraft);
       await executeDraftThroughPipeline(execDraft);
+      setExecutionLoading(false);
       return;
     }
 
     // Detect send intent but missing data
     if (isSendIntent && (!parsedAddress || parsedAmount <= 0)) {
       setMessages((prev) => [...prev, agentMessage('Invalid transaction format', 'system')]);
+      setExecutionLoading(false);
       return;
     }
 
@@ -833,6 +838,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
       ]);
     } finally {
       setTyping(false);
+      setExecutionLoading(false);
     }
   };
 

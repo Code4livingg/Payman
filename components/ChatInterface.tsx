@@ -1176,14 +1176,30 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto p-4 md:p-6">
             {!messages.length && (
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+              <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
                 <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-600">Example commands</p>
-                <div className="grid gap-2 md:grid-cols-2">
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                    gap: '12px',
+                    width: '100%'
+                  }}
+                >
                   {PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => onSendMessage(prompt)}
-                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left font-mono text-xs text-slate-400 transition hover:border-[#00c896]/30 hover:bg-[rgba(0,200,150,0.03)] hover:text-slate-300"
+                      style={{
+                        width: '100%',
+                        minWidth: 0,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                        padding: '14px 16px',
+                        borderRadius: '12px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      className="border border-white/[0.06] bg-white/[0.02] text-left font-mono text-xs text-slate-400 hover:border-[rgba(0,255,180,0.25)] hover:bg-[rgba(0,200,150,0.03)] hover:text-slate-300 hover:-translate-y-0.5"
                     >
                       {prompt}
                     </button>

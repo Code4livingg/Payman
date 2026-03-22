@@ -95,3 +95,13 @@
 .animate-page-enter {
   animation: page-enter 300ms ease-out;
 }
+
+@keyframes caretBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes justifyPulse {
+  0%, 100% { text-decoration-color: #00c896; }
+  50% { text-decoration-color: #7c3aed; }
+}

@@ -1,31 +1,67 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+const PHRASES = [
+  'Autonomous payments.',
+  'That must justify',
+  'every action.'
+];
+
+const FULL_TEXT = PHRASES.join('\n');
+const BASE_DELAY = 28;
+const JITTER = 30; // ±ms for human rhythm
+const PAUSE_AFTER_COMPLETE = 800;
 
 export function TypewriterHeadline() {
-  const lines = ['Autonomous payments.', 'That must justify', 'every action.'];
-  const full = lines.join('\n');
   const [displayed, setDisplayed] = useState('');
   const [done, setDone] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let i = 0;
-    const timer = setInterval(() => {
-      setDisplayed(full.slice(0, i + 1));
-      i++;
-      if (i >= full.length) {
-        clearInterval(timer);
-        setDone(true);
+    let index = 0;
+
+    const type = () => {
+      if (index >= FULL_TEXT.length) {
+        timeoutRef.current = setTimeout(() => setDone(true), PAUSE_AFTER_COMPLETE);
+        return;
       }
-    }, 28);
-    return () => clearInterval(timer);
-  }, [full]);
+
+      setDisplayed(FULL_TEXT.slice(0, index + 1));
+      index++;
+
+      // Human-like rhythm: slightly faster at start, random jitter
+      const progress = index / FULL_TEXT.length;
+      const eased = BASE_DELAY + JITTER * progress + Math.random() * JITTER;
+
+      timeoutRef.current = setTimeout(() => {
+        rafRef.current = requestAnimationFrame(type);
+      }, eased);
+    };
+
+    rafRef.current = requestAnimationFrame(type);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const renderLine = (line: string, idx: number) => {
     if (line.includes('justify')) {
       const [before, after] = line.split('justify');
       return (
-        <span key={idx} style={{ display: 'block' }}>
+        <span
+          key={idx}
+          style={{
+            display: 'block',
+            opacity: 1,
+            transform: 'translateY(0)',
+            transition: 'opacity 250ms ease-out, transform 250ms ease-out',
+            willChange: 'transform, opacity'
+          }}
+        >
           {before}
           <span
             style={{
@@ -43,7 +79,13 @@ export function TypewriterHeadline() {
       );
     }
     return (
-      <span key={idx} style={{ display: 'block' }}>
+      <span
+        key={idx}
+        style={{
+          display: 'block',
+          willChange: 'transform, opacity'
+        }}
+      >
         {line}
       </span>
     );
@@ -58,10 +100,17 @@ export function TypewriterHeadline() {
         color: '#fff',
         whiteSpace: 'pre-line',
         minHeight: '260px',
-        letterSpacing: '-0.02em'
+        letterSpacing: '-0.02em',
+        willChange: 'transform, opacity'
       }}
     >
+      {/* Invisible placeholder to prevent layout shift */}
+      <span aria-hidden style={{ visibility: 'hidden', position: 'absolute', pointerEvents: 'none' }}>
+        {FULL_TEXT.split('\n').map((line, i) => renderLine(line, i))}
+      </span>
+
       {displayed.split('\n').map((line, i) => renderLine(line, i))}
+
       {!done && (
         <span
           style={{
@@ -71,7 +120,8 @@ export function TypewriterHeadline() {
             background: 'linear-gradient(180deg, #00c896, #7c3aed)',
             marginLeft: '3px',
             verticalAlign: 'text-bottom',
-            animation: 'cursorBlink 0.65s steps(1) infinite'
+            animation: 'caretBlink 1s ease-in-out infinite',
+            willChange: 'opacity'
           }}
         />
       )}

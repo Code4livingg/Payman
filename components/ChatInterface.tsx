@@ -15,6 +15,7 @@ import { SchedulesList } from './SchedulesList';
 import { TransactionHistoryPanel } from './TransactionHistoryPanel';
 import { truncateAddress } from '@/lib/metamask';
 import { storage } from '@/lib/storage';
+import { generateId, computeNextRun } from '@/lib/utils';
 import type {
   ActivityItem,
   AgentResponse,

@@ -662,6 +662,10 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     setMessages((prev) => [...prev, nextUserMessage]);
     setInput('');
 
+    // Reset per-execution state — prevents stale policy/flow UI from previous run
+    setPaymentExplanations([]);
+    resetExecutionFlow();
+
     const lower = text.toLowerCase();
 
     // Detect single-step send intent: has both address and amount

@@ -168,6 +168,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
   const [aaveYield, setAaveYield] = useState(12.18);
   const [autoAave, setAutoAave] = useState(false);
   const [aaveLoading, setAaveLoading] = useState(false);
+  const [aaveToast, setAaveToast] = useState<{ message: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     try {
@@ -313,6 +314,11 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
     storage.setLocalTransactions([next, ...current].slice(0, 200));
   };
 
+  const showAaveToast = (message: string, ok: boolean) => {
+    setAaveToast({ message, ok });
+    setTimeout(() => setAaveToast(null), 3000);
+  };
+
   const handleAaveDeposit = async (amount: number) => {
     setAaveLoading(true);
     try {
@@ -321,7 +327,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deposit', amount })
       });
-      const data = await res.json() as { success: boolean; txHash?: string };
+      const data = await res.json() as { success: boolean; txHash?: string; error?: string };
       if (data.success) {
         const prev = Number(localStorage.getItem('payman_aave_deposited') || '0');
         localStorage.setItem('payman_aave_deposited', String(prev + amount));
@@ -332,9 +338,15 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           description: `Deposited ${amount.toFixed(2)} USDC to Aave yield vault`,
           metadata: { amount_usdt: amount, tx_hash: data.txHash || '' }
         });
+        showAaveToast(`${amount.toFixed(2)} USDC deposited to vault`, true);
         await fetchWallet();
+      } else {
+        showAaveToast(data.error || 'Deposit failed', false);
       }
-    } catch { /* non-blocking */ } finally {
+    } catch (err) {
+      console.error('Aave deposit failed:', err);
+      showAaveToast('Deposit failed', false);
+    } finally {
       setAaveLoading(false);
     }
   };
@@ -347,7 +359,7 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'withdraw', amount })
       });
-      const data = await res.json() as { success: boolean; txHash?: string };
+      const data = await res.json() as { success: boolean; txHash?: string; error?: string };
       if (data.success) {
         setAaveBalance((b) => Math.max(0, b - amount));
         addActivity({
@@ -356,9 +368,15 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
           description: `Withdrew ${amount.toFixed(2)} USDC from Aave yield vault`,
           metadata: { amount_usdt: amount, tx_hash: data.txHash || '' }
         });
+        showAaveToast(`${amount.toFixed(2)} USDC withdrawn from vault`, true);
         await fetchWallet();
+      } else {
+        showAaveToast(data.error || 'Withdraw failed', false);
       }
-    } catch { /* non-blocking */ } finally {
+    } catch (err) {
+      console.error('Aave withdraw failed:', err);
+      showAaveToast('Withdraw failed', false);
+    } finally {
       setAaveLoading(false);
     }
   };
@@ -1102,18 +1120,38 @@ export function ChatInterface({ prefill, sessionId }: { prefill?: string; sessio
               <button
                 onClick={() => { void handleAaveDeposit(50); }}
                 disabled={aaveLoading}
-                className="flex-1 rounded-full border border-teal-400/40 bg-teal-400/10 px-2 py-1.5 text-xs text-teal-300 transition hover:bg-teal-400/20 disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full border border-teal-400/40 bg-teal-400/10 px-2 py-1.5 text-xs text-teal-300 transition hover:bg-teal-400/20 disabled:opacity-50"
               >
-                Deposit
+                {aaveLoading ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border border-teal-300 border-t-transparent" />
+                ) : null}
+                Deposit 50
               </button>
               <button
-                onClick={() => { void handleAaveWithdraw(50); }}
+                onClick={() => { void handleAaveWithdraw(10); }}
                 disabled={aaveLoading}
-                className="flex-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.08] disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.08] disabled:opacity-50"
               >
-                Withdraw
+                {aaveLoading ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border border-slate-400 border-t-transparent" />
+                ) : null}
+                Withdraw 10
               </button>
             </div>
+
+            {/* Toast feedback */}
+            {aaveToast && (
+              <div
+                className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-medium transition-all ${
+                  aaveToast.ok
+                    ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border border-red-500/30 bg-red-500/10 text-red-300'
+                }`}
+              >
+                {aaveToast.ok ? '✓ ' : '✗ '}{aaveToast.message}
+              </div>
+            )}
+
             <div className="mt-3 flex items-center justify-between">
               <span className="text-[11px] text-slate-400">Auto-deposit idle funds</span>
               <button
